@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ResourceTablePage } from "../components/ResourceTablePage";
 import { mileageApi } from "../api/resources";
@@ -9,7 +9,7 @@ import type { Column } from "../components/DataTable";
 import { localDateInput, type FieldConfig, type Suggestion } from "../components/FieldForm";
 import { fmtDate, fmtMoney } from "../lib/format";
 
-import { btn } from "../components/ui";
+import { Icon, btn } from "../components/ui";
 interface Summary {
   totalMiles: number;
   totalDeduction: number;
@@ -95,6 +95,12 @@ export function Mileage() {
         hooks={mileageApi}
         columns={columns}
         fields={fields}
+        actions={
+          <Link to="/taxes" className={btn("secondary", "md")}>
+            <Icon name="download" className="h-4 w-4" />
+            Export for taxes
+          </Link>
+        }
       />
 
       {summary && summary.byYear.length > 0 && (

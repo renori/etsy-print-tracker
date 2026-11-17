@@ -52,6 +52,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { to: "/replacements", label: "Replacements", icon: "refresh" },
       { to: "/expenses", label: "Expenses", icon: "receipt" },
       { to: "/mileage", label: "Mileage Log", icon: "car" },
+      { to: "/taxes", label: "Tax Export", icon: "download" },
       { to: "/ledger", label: "Etsy Ledger", icon: "dollar" },
     ],
   },

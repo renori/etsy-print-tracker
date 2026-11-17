@@ -84,6 +84,7 @@ const PATHS = {
   chevronLeft: "M15 6l-6 6 6 6",
   refresh: "M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4",
   upload: "M12 16V4M7 9l5-5 5 5M4 20h16",
+  download: "M12 4v12M7 11l5 5 5-5M4 20h16",
 } as const;
 
 export type IconName = keyof typeof PATHS;

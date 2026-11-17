@@ -21,6 +21,7 @@ import etsyRoutes from "./etsy/routes.js";
 import importRoutes from "./routes/importSheet.js";
 import boxRoutes from "./routes/boxes.js";
 import exportRateRoutes from "./routes/exportRates.js";
+import taxExportRoutes from "./routes/taxExport.js";
 import summaryRoutes from "./routes/summary.js";
 import { startEtsySyncJob } from "./etsy/sync.js";
 import { repairUtcMidnightDates } from "./lib/dates.js";
@@ -61,6 +62,7 @@ await app.register(
     await api.register(importRoutes);
     await api.register(boxRoutes);
     await api.register(exportRateRoutes);
+    await api.register(taxExportRoutes);
     await api.register(summaryRoutes);
   },
   { prefix: "/api" }

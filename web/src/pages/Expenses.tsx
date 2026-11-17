@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ResourceTablePage } from "../components/ResourceTablePage";
 import { expensesApi } from "../api/resources";
@@ -9,7 +9,7 @@ import type { Column } from "../components/DataTable";
 import { localDateInput, type FieldConfig, type Suggestion } from "../components/FieldForm";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { ExpenseImport } from "./ExpenseImport";
-import { Button } from "../components/ui";
+import { Button, Icon, btn } from "../components/ui";
 import { ExpenseMonth } from "./ExpenseMonth";
 
 const columns: Column<Expense>[] = [
@@ -88,9 +88,15 @@ export function Expenses() {
         columns={columns}
         fields={fields}
         actions={
-          <Button icon="receipt" onClick={() => setImporting(true)}>
-            Add from receipt
-          </Button>
+          <>
+            <Link to="/taxes" className={btn("secondary", "md")}>
+              <Icon name="download" className="h-4 w-4" />
+              Export for taxes
+            </Link>
+            <Button icon="receipt" onClick={() => setImporting(true)}>
+              Add from receipt
+            </Button>
+          </>
         }
       />
       {importing && (

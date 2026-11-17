@@ -13,6 +13,7 @@ import { BlackoutTimes } from "./pages/BlackoutTimes";
 import { Replacements } from "./pages/Replacements";
 import { Expenses } from "./pages/Expenses";
 import { Mileage } from "./pages/Mileage";
+import { TaxExport } from "./pages/TaxExport";
 import { Ledger } from "./pages/Ledger";
 import { EtsyConnection } from "./pages/EtsyConnection";
 import { ImportSheet } from "./pages/ImportSheet";
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="replacements" element={<Replacements />} />
         <Route path="expenses" element={<Expenses />} />
         <Route path="mileage" element={<Mileage />} />
+        <Route path="taxes" element={<TaxExport />} />
         <Route path="ledger" element={<Ledger />} />
         <Route path="etsy" element={<EtsyConnection />} />
         <Route path="import" element={<ImportSheet />} />
