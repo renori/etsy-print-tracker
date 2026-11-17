@@ -83,21 +83,35 @@ export async function quoteContext() {
 }
 
 /**
- * Reads a pasted price list: one tier per line, "weight  canada  rest-of-world".
- * Weight may be "4 oz", "8oz", "1 lb", "1.5 lbs" or a bare number (ounces);
- * prices may carry "$". Lines with no weight (headers) are skipped.
+ * Reads a pasted price list: per tier, a weight then the Canada price then
+ * the rest-of-world price. They can share a line ("8 oz  $9.50  $12.75") or
+ * sit on separate lines, as Pirate Ship's rate chart copies. Weight may be
+ * "4 oz", "0.5 lb", "1 lbs" or a bare number (ounces); prices may carry "$".
+ * Header lines ("Weight Not Over", "Canada", …) are skipped.
  */
 export function parseRateTable(text: string): { maxOz: number; canada: number | null; world: number | null }[] {
   const out = new Map<number, { maxOz: number; canada: number | null; world: number | null }>();
+  let current: { maxOz: number; prices: number[] } | null = null;
+  const flush = () => {
+    if (current && current.prices.length && current.maxOz > 0)
+      out.set(current.maxOz, { maxOz: current.maxOz, canada: current.prices[0] ?? null, world: current.prices[1] ?? null });
+    current = null;
+  };
+  const pricesIn = (s: string) => [...s.matchAll(/\$?\s*(\d+(?:\.\d{1,2})?)/g)].map((m) => Number(m[1]));
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.replace(/,(?=\d{3}\b)/g, "").trim();
-    const w = line.match(/^(?:up\s*to\s*)?(\d+(?:\.\d+)?)\s*(oz|ounces?|lbs?|pounds?)?\b/i);
-    if (!w) continue;
+    if (!line) continue;
+    // A price-only line ("$12.99") belongs to the tier above.
+    if (/^\$\s*\d/.test(line) && current) {
+      current.prices.push(...pricesIn(line));
+      continue;
+    }
+    const w = line.match(/^(?:up\s*to\s*)?(\d+(?:\.\d+)?)\s*(oz|ounces?|lbs?|pounds?)?(?![\d.])/i);
+    if (!w) continue; // header text
+    flush();
     const n = Number(w[1]);
-    const maxOz = /^(lb|pound)/i.test(w[2] ?? "") ? n * 16 : n;
-    const prices = [...line.slice(w[0].length).matchAll(/\$?\s*(\d+(?:\.\d{1,2})?)/g)].map((m) => Number(m[1]));
-    if (!prices.length || maxOz <= 0) continue;
-    out.set(maxOz, { maxOz, canada: prices[0] ?? null, world: prices[1] ?? null });
+    current = { maxOz: /^(lb|pound)/i.test(w[2] ?? "") ? n * 16 : n, prices: pricesIn(line.slice(w[0].length)) };
   }
+  flush();
   return [...out.values()].sort((a, b) => a.maxOz - b.maxOz);
 }
