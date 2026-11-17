@@ -1,0 +1,292 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// One row per printable part (was "Sheet1" — the parts catalog + costing)
+model Part {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  description     String?
+  printMinutes    Float
+  filamentGrams   Float
+  filamentPricePerKg Float
+  filamentCost    Float
+  electricityCost Float
+  depreciation    Float
+  shippingBoxCost Float
+  bagCost         Float
+  wrappingCost    Float
+  hardwareCost    Float
+  laborCost       Float
+  touchTimeMinutes Float
+  cost            Float
+  listPrice       Float?
+  margin          Float?
+  packageType     String?
+  onHand          Int      @default(0)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  listingParts    ListingPart[]
+  plateRecipeParts PlateRecipePart[]
+  orderParts      OrderPart[]
+  replacementParts ReplacementPart[]
+  queueEntryParts PlateQueuePart[]
+}
+
+model Printer {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  notes     String?
+
+  plateRecipes    PlateRecipe[]
+  queueEntries    PlateQueueEntry[]
+}
+
+/// Which parts can share a plate together, up to a max count each
+model PlateRecipe {
+  id            String   @id @default(cuid())
+  name          String?
+  printerId     String?
+  printer       Printer? @relation(fields: [printerId], references: [id])
+  plateMinutes  Float?
+  notes         String?
+
+  parts         PlateRecipePart[]
+}
+
+model PlateRecipePart {
+  id            String   @id @default(cuid())
+  recipeId      String
+  recipe        PlateRecipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  partId        String
+  part          Part     @relation(fields: [partId], references: [id])
+  maxCount      Int
+}
+
+/// Recurring or one-off windows where no new plate may start
+model BlackoutWindow {
+  id          String  @id @default(cuid())
+  /// e.g. "Daily", "Weekdays", "Weekends", "Mon", "Tue-Thu", "Mon,Wed", or an ISO date "2026-10-03"
+  daysPattern String
+  fromTime    String? // "HH:mm", blank = whole day
+  toTime      String?
+  note        String?
+}
+
+/// Singleton row of global scheduling knobs ("Blackout Times" side panel)
+model ScheduleSettings {
+  id                Int     @id @default(1)
+  morningStart      String  @default("07:30")
+  morningWindowMinutes Int  @default(15)
+  homeTime          String  @default("18:00")
+  lastStart         String  @default("00:30")
+  changeoverMinutes Int     @default(5)
+  homeOnWeekends    Boolean @default(true)
+  weekendStart      String  @default("09:00")
+  postOfficeDays    String  @default("Mon, Wed, Fri")
+  postOfficeTime    String  @default("12:00")
+  shipWithinDays    Int     @default(3)
+}
+
+/// One row per plate — the live print queue / schedule
+model PlateQueueEntry {
+  id            String   @id @default(cuid())
+  printerId     String?
+  printer       Printer? @relation(fields: [printerId], references: [id])
+  label         String
+  plannedStart  DateTime
+  plannedFinish DateTime
+  printMinutes  Float
+  forOrders     String?  // free text, e.g. order numbers or "(logged by hand)"
+  started       Boolean  @default(false)
+  startedAt     DateTime?
+  done          Boolean  @default(false)
+  doneAt        DateTime?
+  manualEntry   Boolean  @default(false) // came from "Log a Print"
+  createdAt     DateTime @default(now())
+
+  parts         PlateQueuePart[]
+}
+
+model PlateQueuePart {
+  id            String   @id @default(cuid())
+  entryId       String
+  entry         PlateQueueEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  partId        String
+  part          Part     @relation(fields: [partId], references: [id])
+  quantity      Int
+}
+
+/// Maps an Etsy listing (+ optional variation text match) to the parts an order of it needs.
+/// Multiple rows may share the same listing ID, each gated by a different
+/// `variationContains`, so the same listing can route to different parts
+/// depending on which variation the buyer picked (blank = matches any).
+model ListingMapping {
+  id                String  @id @default(cuid())
+  etsyListingId     String
+  listingTitle      String
+  variationContains String?
+  notes             String?
+  autoGuessed       Boolean @default(false)
+
+  parts             ListingPart[]
+
+  @@index([etsyListingId])
+}
+
+model ListingPart {
+  id          String   @id @default(cuid())
+  mappingId   String
+  mapping     ListingMapping @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+  partId      String
+  part        Part     @relation(fields: [partId], references: [id])
+  quantity    Int      @default(1)
+}
+
+/// Order.status is a plain string (SQLite has no native enum) — one of:
+/// NEEDS_PRINTING | PRINTING | READY_FROM_STOCK | READY_LABEL_BOUGHT | PACKED | SHIPPED
+/// Active Orders + Completed Orders — one lifecycle, status tells you which "tab" it'd show on
+model Order {
+  id              String      @id @default(cuid())
+  etsyOrderId     String      @unique
+  buyerName       String
+  orderedAt       DateTime
+  shipTarget      DateTime?
+  etsyShipBy      DateTime?
+  itemsRaw        String      // free text summary, e.g. "1x Full Grip Case ... Style: Full Back"
+  /// JSON array of the Etsy line items: [{listingId, title, quantity, variations: [{name, value}]}].
+  /// Kept so parts can be re-linked when the Listing Map changes.
+  etsyLines       String?
+  status          String      @default("NEEDS_PRINTING")
+  readyBy         DateTime?
+  packed          Boolean     @default(false)
+  /// Set by the Etsy sync once the receipt has a shipment with tracking (or ticked by hand).
+  labelBought     Boolean     @default(false)
+  labelBoughtAt   DateTime?
+  packageType     String?
+
+  shippedAt       DateTime?
+  carrier         String?
+  trackingNumber  String?
+  orderTotal      Float?
+  etsyGross       Float?
+  salesTax        Float?
+  etsyFees        Float?
+  etsyEarnings    Float?
+  labelCost       Float?
+  /// Where labelCost came from: "etsy" (ledger match), "batch" (paired within a batch of labels
+  /// bought together), "estimate" (typical cost for the box size), "manual" (typed in), null (imported).
+  labelCostSource String?
+  productionCost  Float?
+  laborMinutes    Float?
+  netProfit       Float?
+  margin          Float?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  parts           OrderPart[]
+}
+
+model OrderPart {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  partId    String
+  part      Part    @relation(fields: [partId], references: [id])
+  quantity  Int
+}
+
+/// Warranty / replacement shipments — mirrors the Order flow but logs its own COGS+label expense on ship
+model Replacement {
+  id               String    @id @default(cuid())
+  code             String    @unique // "R-1029-2"
+  originalOrderId  String?
+  buyerName        String
+  requestedAt      DateTime
+  shipByTarget     DateTime?
+  notes            String?
+  shipped          Boolean   @default(false)
+  shippedAt        DateTime?
+  labelCost        Float?
+  cogsLoggedAt     DateTime?
+  labelLoggedAt    DateTime?
+
+  parts            ReplacementPart[]
+}
+
+model ReplacementPart {
+  id            String      @id @default(cuid())
+  replacementId String
+  replacement   Replacement @relation(fields: [replacementId], references: [id], onDelete: Cascade)
+  partId        String
+  part          Part        @relation(fields: [partId], references: [id])
+  quantity      Int
+}
+
+
+/// Shipping box/mailer stock. Matched to orders by name against Order.packageType
+/// or, failing that, the parts' Part.packageType (e.g. "13x10x3", "8x4x1 mailer").
+model Box {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  onHand    Int     @default(0)
+  reorderAt Int?
+  costEach  Float?
+  notes     String?
+}
+
+model Expense {
+  id              String   @id @default(cuid())
+  date            DateTime
+  item            String
+  vendor          String?
+  category        String?
+  cost            Float
+  taxYear         Int
+  scheduleCLine   String?
+  deductible      Boolean  @default(true)
+  paidWith        String?
+  invoiceRef      String?
+  notes           String?
+}
+
+model MileageEntry {
+  id          String   @id @default(cuid())
+  date        DateTime
+  destination String
+  purpose     String?
+  miles       Float
+  ratePerMile Float    @default(0.70)
+}
+
+model EtsyLedgerEntry {
+  id            String   @id @default(cuid())
+  etsyEntryId   String   @unique
+  createdAt     DateTime
+  ledgerType    String
+  referenceType String?
+  referenceId   String?
+  description   String?
+  amount        Float
+  currency      String   @default("USD")
+  balance       Float?
+  parentEntryId String?
+}
+
+model EtsyCredentials {
+  id            Int      @id @default(1)
+  shopId        String?
+  apiKeystring  String?
+  accessToken   String?
+  refreshToken  String?
+  tokenExpiresAt DateTime?
+}

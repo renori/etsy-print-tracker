@@ -1,0 +1,44 @@
+services:
+  print-tracker:
+    # Built by GitHub Actions on every push to main (.github/workflows/docker.yml).
+    image: ghcr.io/renori/etsy-print-tracker:latest
+    container_name: print-tracker
+    restart: unless-stopped
+    ports:
+      - "${PORT:-9999}:${PORT:-9999}"
+    environment:
+      DATABASE_URL: "file:../data/tracker.db"
+      PORT: "${PORT:-9999}"
+      TZ: "${TZ:-America/Los_Angeles}"
+      ETSY_API_KEYSTRING: ${ETSY_API_KEYSTRING:-}
+      ETSY_SHARED_SECRET: ${ETSY_SHARED_SECRET:-}
+      ETSY_SHOP_ID: ${ETSY_SHOP_ID:-}
+      ETSY_REDIRECT_URI: ${ETSY_REDIRECT_URI:-}
+      # Optional: adds an AI reader for expense receipts.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - tracker-data:/app/data
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:'+(process.env.PORT||9999)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Checks GitHub every 5 minutes; when a new image is published it pulls it
+  # and restarts print-tracker. Your data volume is kept.
+  watchtower:
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: "${TZ:-America/Los_Angeles}"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_LABEL_ENABLE: "true"
+
+volumes:
+  tracker-data:
