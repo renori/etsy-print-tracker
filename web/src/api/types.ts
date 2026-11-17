@@ -18,6 +18,8 @@ export interface Part {
   listPrice?: number | null;
   margin?: number | null;
   packageType?: string | null;
+  /** One finished unit as shipped, in ounces. */
+  shipWeightOz?: number | null;
   onHand: number;
   active: boolean;
 }
@@ -130,7 +132,7 @@ export interface Order {
   etsyFees?: number | null;
   etsyEarnings?: number | null;
   labelCost?: number | null;
-  /** "etsy" | "batch" | "estimate" | "manual" | "digital" | null (imported) */
+  /** "etsy" | "batch" | "estimate" | "quote" | "manual" | "digital" | null (imported) */
   labelCostSource?: string | null;
   /** How an estimate was worked out. */
   labelCostNote?: string | null;
@@ -138,6 +140,12 @@ export interface Order {
   shipCountry?: string | null;
   /** Shipping the buyer paid on Etsy. */
   shippingPaid?: number | null;
+  /** Packed weight typed in on the order (oz). */
+  shipWeightOz?: number | null;
+  /** Packed weight the server worked out (or the typed one). */
+  weight?: { oz: number; basis: "typed" | "parts" | "estimated"; box: string | null } | null;
+  /** Pirate Ship Simple Export Rate for orders going abroad. */
+  exportQuote?: { price: number; zone: "canada" | "world"; tierOz: number } | null;
   productionCost?: number | null;
   laborMinutes?: number | null;
   netProfit?: number | null;
@@ -153,6 +161,8 @@ export interface Box {
   onHand: number;
   reorderAt?: number | null;
   costEach?: number | null;
+  /** Empty box weight (oz). */
+  weightOz?: number | null;
   notes?: string | null;
 }
 

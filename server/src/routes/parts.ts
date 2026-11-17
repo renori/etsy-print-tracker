@@ -23,6 +23,7 @@ const create = z.object({
   listPrice: z.number().nullable().optional(),
   margin: z.number().nullable().optional(),
   packageType: z.string().nullable().optional(),
+  shipWeightOz: z.number().positive().nullable().optional(),
   onHand: z.number().int().default(0),
   active: z.boolean().default(true),
 });

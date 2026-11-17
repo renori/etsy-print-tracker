@@ -1,6 +1,7 @@
 import { db } from "./db.js";
 import { isDigitalOrder, loadMappings, parseLines } from "./orderLines.js";
 import { boxForOrder, normBoxName } from "./boxes.js";
+import { quoteContext } from "./exportRate.js";
 
 /**
  * Order money, worked out the way the old sheet did (checked against its
@@ -211,9 +212,27 @@ export function estimateLabel(t: EstimateTarget, past: PastLabel[]): { cost: num
   return past.length ? { cost: median(costs(past))!, note: `median of all ${past.length} past labels (nothing closer to compare)` } : null;
 }
 
-async function estimateFor(orderId: string, past?: PastLabel[]) {
+type QuoteCtx = Awaited<ReturnType<typeof quoteContext>>;
+type OrderWithParts = Parameters<QuoteCtx["quote"]>[0] & { shippingPaid: number | null };
+
+/**
+ * Best guess at a label cost with no ledger match: for an order going abroad,
+ * Pirate Ship's Simple Export Rate for its weight (labels bought on Pirate Ship
+ * never show up in Etsy's ledger); otherwise an estimate from past labels.
+ */
+function guessLabel(o: OrderWithParts, past: PastLabel[], ctx: QuoteCtx): { cost: number; source: string; note: string } | null {
+  const { exportQuote: q } = ctx.quote(o);
+  if (q) {
+    const how = q.weight.basis === "typed" ? "typed weight" : q.weight.basis === "parts" ? "parts + box weight" : "estimated weight";
+    return { cost: q.price, source: "quote", note: `Simple Export Rate to ${o.shipCountry}: ${q.weight.oz} oz (${how}), ≤${q.tierOz} oz tier` };
+  }
+  const est = estimateLabel({ shippingPaid: o.shippingPaid, shipCountry: o.shipCountry, box: boxForOrder(o) }, past);
+  return est ? { ...est, source: "estimate" } : null;
+}
+
+async function estimateFor(orderId: string, past?: PastLabel[], ctx?: QuoteCtx) {
   const o = await db.order.findUniqueOrThrow({ where: { id: orderId }, include: { parts: { include: { part: true } } } });
-  return estimateLabel({ shippingPaid: o.shippingPaid, shipCountry: o.shipCountry, box: boxForOrder(o) }, past ?? (await pastLabels()));
+  return guessLabel(o, past ?? (await pastLabels()), ctx ?? (await quoteContext()));
 }
 
 /**
@@ -242,7 +261,8 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
     const batch = await db.order.findMany({ where: { labelBoughtAt: window, digital: false }, orderBy: { id: "asc" } });
     if (labels.length && labels.length === batch.length) {
       const past = await pastLabels();
-      const expected = await Promise.all(batch.map(async (o) => ({ id: o.id, est: (await estimateFor(o.id, past))?.cost ?? 0 })));
+      const ctx = await quoteContext();
+      const expected = await Promise.all(batch.map(async (o) => ({ id: o.id, est: (await estimateFor(o.id, past, ctx))?.cost ?? 0 })));
       expected.sort((a, b) => a.est - b.est || a.id.localeCompare(b.id));
       const costs = labels.map((e) => round(-e.amount)).sort((a, b) => a - b);
       const i = expected.findIndex((x) => x.id === order.id);
@@ -253,8 +273,7 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
     if (costs.length && costs.every((c) => c === costs[0])) return { cost: costs[0], source: "batch" };
   }
 
-  const est = await estimateFor(order.id);
-  return est ? { cost: est.cost, source: "estimate", note: est.note } : null;
+  return estimateFor(order.id);
 }
 
 /**
@@ -264,16 +283,17 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
  */
 export async function refreshLabelEstimates(): Promise<number> {
   const orders = await db.order.findMany({
-    where: { digital: false, OR: [{ labelCostSource: "estimate" }, { status: "SHIPPED", labelCost: null }] },
+    where: { digital: false, OR: [{ labelCostSource: { in: ["estimate", "quote"] } }, { status: "SHIPPED", labelCost: null }] },
     include: { parts: { include: { part: true } } },
   });
   if (!orders.length) return 0;
   const past = await pastLabels();
+  const ctx = await quoteContext();
   let n = 0;
   for (const o of orders) {
-    const est = estimateLabel({ shippingPaid: o.shippingPaid, shipCountry: o.shipCountry, box: boxForOrder(o) }, past);
-    if (!est || (est.cost === o.labelCost && est.note === o.labelCostNote)) continue;
-    const data = { labelCost: est.cost, labelCostSource: "estimate", labelCostNote: est.note };
+    const est = guessLabel(o, past, ctx);
+    if (!est || (est.cost === o.labelCost && est.note === o.labelCostNote && est.source === o.labelCostSource)) continue;
+    const data = { labelCost: est.cost, labelCostSource: est.source, labelCostNote: est.note };
     await db.order.update({ where: { id: o.id }, data: { ...data, ...profit({ ...o, ...data }) } });
     n++;
   }

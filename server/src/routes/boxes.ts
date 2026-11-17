@@ -8,6 +8,7 @@ const create = z.object({
   onHand: z.number().int().default(0),
   reorderAt: z.number().int().nullable().optional(),
   costEach: z.number().nullable().optional(),
+  weightOz: z.number().nonnegative().nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 const update = create.partial();

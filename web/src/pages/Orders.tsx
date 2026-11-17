@@ -4,6 +4,7 @@ import { boxesApi, ordersApi, usePackOrders, useShipOrders } from "../api/resour
 import type { Box, Order, OrderStatus } from "../api/types";
 import { fmtDate } from "../lib/format";
 import { Button, EtsyOrderLink, Icon, PageHeader, inputClass } from "../components/ui";
+import { ExportQuote } from "../components/ExportQuote";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   NEEDS_PRINTING: "Needs printing",
@@ -315,6 +316,7 @@ function OrderCard({
           )}
         </div>
       </label>
+      {!order.labelBought && <ExportQuote order={order} onUpdate={onUpdate} />}
       <div
         className={`grid grid-cols-2 gap-2 border-t p-3 ${handled ? "border-neutral-200 sm:grid-cols-2 dark:border-neutral-800" : "border-neutral-100 sm:grid-cols-[1fr_1fr_auto_auto] dark:border-neutral-800"}`}
       >

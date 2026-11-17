@@ -28,6 +28,8 @@ model Part {
   listPrice       Float?
   margin          Float?
   packageType     String?
+  /// Weight of one finished unit as shipped (part + bag/wrap), in ounces. Blank = filament weight.
+  shipWeightOz    Float?
   onHand          Int      @default(0)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -193,6 +195,8 @@ model Order {
   shipCountry     String?
   /// Shipping the buyer paid on Etsy (0 = free shipping).
   shippingPaid    Float?
+  /// Packed weight in ounces, typed in; blank = worked out from parts + box.
+  shipWeightOz    Float?
   productionCost  Float?
   laborMinutes    Float?
   netProfit       Float?
@@ -249,7 +253,18 @@ model Box {
   onHand    Int     @default(0)
   reorderAt Int?
   costEach  Float?
+  /// Empty box/mailer weight in ounces, added to an order's shipping weight.
+  weightOz  Float?
   notes     String?
+}
+
+/// Pirate Ship "Simple Export Rate" price list: one row per weight tier
+/// (price applies up to and including maxOz), Canada vs rest of world.
+model ExportRate {
+  id      String @id @default(cuid())
+  maxOz   Float  @unique
+  canada  Float?
+  world   Float?
 }
 
 model Expense {

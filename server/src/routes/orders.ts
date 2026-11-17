@@ -5,7 +5,8 @@ import { ORDER_STATUS, ORDER_STATUSES } from "../lib/constants.js";
 import { rebuildQueue } from "../scheduler/queue.js";
 import { boxForOrder } from "../lib/boxes.js";
 import { moveStock } from "../lib/stock.js";
-import { profit } from "../lib/financials.js";
+import { profit, refreshLabelEstimates } from "../lib/financials.js";
+import { quoteContext } from "../lib/exportRate.js";
 
 const partSchema = z.object({ partId: z.string(), quantity: z.number().int().positive() });
 const create = z.object({
@@ -33,14 +34,17 @@ const update = create.partial().extend({
   etsyFees: z.number().nullable().optional(),
   etsyEarnings: z.number().nullable().optional(),
   labelCost: z.number().nullable().optional(),
+  shipWeightOz: z.number().positive().nullable().optional(),
   productionCost: z.number().nullable().optional(),
   laborMinutes: z.number().nullable().optional(),
   netProfit: z.number().nullable().optional(),
   margin: z.number().nullable().optional(),
 });
 
-function withBox<T extends Parameters<typeof boxForOrder>[0]>(order: T) {
-  return { ...order, boxName: boxForOrder(order) };
+type Quoter = Awaited<ReturnType<typeof quoteContext>>;
+/** Adds the order's box, packed weight and (going abroad) its Simple Export Rate quote. */
+function withBox<T extends Parameters<Quoter["quote"]>[0]>(order: T, ctx: Quoter) {
+  return { ...order, boxName: boxForOrder(order), ...ctx.quote(order) };
 }
 
 export default async function orderRoutes(app: FastifyInstance) {
@@ -51,12 +55,13 @@ export default async function orderRoutes(app: FastifyInstance) {
       include: { parts: { include: { part: true } } },
       orderBy: { orderedAt: "desc" },
     });
-    return rows.map(withBox);
+    const ctx = await quoteContext();
+    return rows.map((o) => withBox(o, ctx));
   });
 
   app.get("/orders/:id", async (req) => {
     const { id } = req.params as { id: string };
-    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } }));
+    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } }), await quoteContext());
   });
 
   app.post("/orders", async (req, reply) => {
@@ -94,8 +99,9 @@ export default async function orderRoutes(app: FastifyInstance) {
       const o = await db.order.update({ where: { id }, data: { labelCostSource: rest.labelCost == null ? null : "manual", labelCostNote: null } });
       await db.order.update({ where: { id }, data: profit(o) });
     }
+    if (rest.shipWeightOz !== undefined) await refreshLabelEstimates();
     await rebuildQueue();
-    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } }));
+    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } }), await quoteContext());
   });
 
   /** Pack (or un-pack) several orders at once; orders already in that state are skipped. */

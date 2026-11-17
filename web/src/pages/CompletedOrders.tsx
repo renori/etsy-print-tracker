@@ -34,7 +34,7 @@ function LabelCost({ order }: { order: Order }) {
     update({ id: order.id, data: { labelCost: next } }, { onSettled: () => setEditing(false) });
   };
 
-  const est = order.labelCostSource === "estimate";
+  const est = order.labelCostSource === "estimate" || order.labelCostSource === "quote";
   const digital = order.digital && order.labelCostSource === "digital";
   const batch = order.labelCostSource === "batch";
   if (!editing) {
@@ -108,7 +108,7 @@ export function CompletedOrders() {
   const sum = (xs: Order[], k: "netProfit" | "etsyGross") => xs.reduce((s, o) => s + (o[k] ?? 0), 0);
   const pending = shipped.filter((o) => o.etsyEarnings == null).length;
   const noLabel = shipped.filter((o) => o.etsyEarnings != null && o.labelCost == null).length;
-  const estimated = shipped.filter((o) => o.labelCostSource === "estimate").length;
+  const estimated = shipped.filter((o) => o.labelCostSource === "estimate" || o.labelCostSource === "quote").length;
 
   return (
     <div className="space-y-4">
@@ -131,7 +131,7 @@ export function CompletedOrders() {
       {estimated > 0 && (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           <span className="italic">≈</span> {estimated} label cost{estimated === 1 ? " is an estimate" : "s are estimates"}, based mostly on the shipping the
-          buyer paid, then destination and box size (hover one to see how). They update automatically if Etsy's ledger gives an exact match, or tap
+          buyer paid, then destination and box size; orders shipped abroad use your Simple Export price for their weight (hover one to see how). They update automatically if Etsy's ledger gives an exact match, or tap
           one to enter the real cost.{" "}
           <span className="text-neutral-400">*</span> = from a batch of labels bought together (batch total exact).
         </p>
@@ -160,7 +160,7 @@ export function CompletedOrders() {
                 <div className="text-xs text-neutral-500">
                   <EtsyOrderLink id={o.etsyOrderId} /> · shipped {fmtDate(o.shippedAt)} · {pct(o.margin)} margin
                 </div>
-                {o.labelCostSource === "estimate" && o.labelCostNote && (
+                {(o.labelCostSource === "estimate" || o.labelCostSource === "quote") && o.labelCostNote && (
                   <p className="mt-1 text-xs text-neutral-500 italic">≈ label: {o.labelCostNote}</p>
                 )}
                 <dl className="mt-2 grid grid-cols-4 gap-2 text-xs">

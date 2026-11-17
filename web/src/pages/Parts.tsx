@@ -25,6 +25,7 @@ const fields: FieldConfig[] = [
   { key: "listPrice", label: "List price", type: "number" },
   { key: "margin", label: "Margin (0-1)", type: "number" },
   { key: "packageType", label: "Package type", type: "text" },
+  { key: "shipWeightOz", label: "Ship weight (oz, one unit bagged/wrapped; blank = filament weight)", type: "number" },
   { key: "onHand", label: "On hand", type: "number" },
   { key: "active", label: "Active", type: "boolean", defaultValue: true },
 ];

@@ -344,7 +344,7 @@ export async function syncFinancials() {
         { labelCost: null, labelBought: true },
         { labelCost: null, status: ORDER_STATUS.SHIPPED },
         // Estimated / batch-paired costs get another chance at an exact ledger match.
-        { labelCostSource: { in: ["estimate", "batch"] } },
+        { labelCostSource: { in: ["estimate", "batch", "quote"] } },
       ],
     },
   });
