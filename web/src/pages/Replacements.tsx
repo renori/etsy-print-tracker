@@ -3,7 +3,7 @@ import { replacementsApi, useShipReplacement } from "../api/resources";
 import { fmtDate, fmtMoney } from "../lib/format";
 import { Modal } from "../components/Modal";
 import { PartsPicker, type PartQtyRow } from "../components/PartsPicker";
-import { Button, btn, inputClass } from "../components/ui";
+import { Button, EtsyOrderLink, btn, inputClass } from "../components/ui";
 
 export function Replacements() {
   const { data, isLoading } = replacementsApi.useList();
@@ -35,6 +35,12 @@ export function Replacements() {
                   <div className="text-sm text-neutral-500">
                     Needs: {r.parts.map((p) => `${p.quantity}× ${p.part?.name ?? p.partId}`).join(", ")}
                   </div>
+                  {r.order && (
+                    <div className="mt-0.5 text-sm">
+                      Ships as Etsy order <EtsyOrderLink id={r.order.etsyOrderId} />
+                      {r.order.status !== "SHIPPED" && <span className="text-neutral-500"> · marked shipped when that order ships</span>}
+                    </div>
+                  )}
                   <div className="text-xs text-neutral-400">
                     Requested {fmtDate(r.requestedAt)} · COGS logged {fmtDate(r.cogsLoggedAt)} · Label logged {fmtDate(r.labelLoggedAt)}
                   </div>
@@ -42,7 +48,10 @@ export function Replacements() {
                 {r.shipped ? (
                   <span className="rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300">
                     Shipped · label {fmtMoney(r.labelCost)}
+                    {r.order && " (on the Etsy order)"}
                   </span>
+                ) : r.order ? (
+                  <span className="rounded bg-sky-100 px-2 py-1 text-xs font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300">Linked to Etsy order</span>
                 ) : (
                   <div className="flex items-center gap-2">
                     <input

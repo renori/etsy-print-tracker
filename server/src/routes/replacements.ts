@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
+import { shipReplacement } from "../lib/replacements.js";
 import { rebuildQueue } from "../scheduler/queue.js";
 
 const partSchema = z.object({ partId: z.string(), quantity: z.number().int().positive() });
@@ -17,7 +18,7 @@ const create = z.object({
 const update = create.partial().extend({ parts: z.array(partSchema).optional() });
 
 export default async function replacementRoutes(app: FastifyInstance) {
-  app.get("/replacements", async () => db.replacement.findMany({ include: { parts: { include: { part: true } } } }));
+  app.get("/replacements", async () => db.replacement.findMany({ include: { parts: { include: { part: true } }, order: { select: { id: true, etsyOrderId: true, status: true } } } }));
 
   app.post("/replacements", async (req, reply) => {
     const { parts, ...rest } = create.parse(req.body);
@@ -53,53 +54,10 @@ export default async function replacementRoutes(app: FastifyInstance) {
     const body = z.object({ shippedAt: z.coerce.date().optional(), labelCost: z.number().optional() }).parse(req.body ?? {});
     const shippedAt = body.shippedAt ?? new Date();
 
-    const replacement = await db.replacement.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } });
-
-    await db.$transaction(async (tx) => {
-      const data: Record<string, unknown> = { shipped: true, shippedAt };
-      if (body.labelCost !== undefined) data.labelCost = body.labelCost;
-
-      if (!replacement.cogsLoggedAt) {
-        for (const p of replacement.parts) {
-          const cogs = (p.part.cost - p.part.filamentCost) * p.quantity;
-          await tx.expense.create({
-            data: {
-              date: shippedAt,
-              item: `Replacement ${replacement.code} — ${p.part.name}`,
-              category: "Parts",
-              cost: cogs,
-              taxYear: shippedAt.getFullYear(),
-              scheduleCLine: "Part III COGS – materials",
-              deductible: true,
-              notes: `Auto-logged COGS for replacement ${replacement.code}`,
-            },
-          });
-        }
-        data.cogsLoggedAt = shippedAt;
-      }
-
-      const labelCost = body.labelCost ?? replacement.labelCost;
-      if (labelCost && !replacement.labelLoggedAt) {
-        await tx.expense.create({
-          data: {
-            date: shippedAt,
-            item: `Replacement ${replacement.code} — label`,
-            category: "Shipping",
-            cost: labelCost,
-            taxYear: shippedAt.getFullYear(),
-            scheduleCLine: "Line 27a Other – shipping supplies & postage",
-            deductible: true,
-            notes: `Auto-logged label cost for replacement ${replacement.code}`,
-          },
-        });
-        data.labelLoggedAt = shippedAt;
-      }
-
-      await tx.replacement.update({ where: { id }, data });
-    });
+    await shipReplacement(id, { shippedAt, labelCost: body.labelCost });
 
     await rebuildQueue();
-    return db.replacement.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } });
+    return db.replacement.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } }, order: { select: { id: true, etsyOrderId: true, status: true } } } });
   });
 
   app.delete("/replacements/:id", async (req, reply) => {

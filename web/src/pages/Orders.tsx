@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { boxesApi, ordersApi, usePackOrders, useShipOrders } from "../api/resources";
 import type { Box, Order, OrderStatus } from "../api/types";
 import { fmtDate } from "../lib/format";
 import { Button, EtsyOrderLink, Icon, PageHeader, inputClass } from "../components/ui";
 import { ExportQuote } from "../components/ExportQuote";
+import { OrderPartsEditor } from "../components/OrderPartsEditor";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   NEEDS_PRINTING: "Needs printing",
@@ -299,13 +299,10 @@ function OrderCard({
                 <div className="mt-1 text-xs text-neutral-500">Needs {order.parts.map((p) => `${p.quantity}× ${p.part?.name ?? p.partId}`).join(", ")}</div>
               ) : (
                 !order.packed && (
-                  <Link
-                    to="/listing-map"
-                    className="mt-1.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-amber-100 px-2.5 text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200"
-                  >
+                  <div className="mt-1.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-amber-100 px-2.5 text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                     <Icon name="alert" className="h-3.5 w-3.5" />
-                    Not linked to stock — fix in Listing Map
-                  </Link>
+                    Not linked to stock: pick its parts below
+                  </div>
                 )
               )}
               <div className="mt-1.5 text-xs text-neutral-500">
@@ -316,6 +313,7 @@ function OrderCard({
           )}
         </div>
       </label>
+      {!handled && <OrderPartsEditor order={order} />}
       {!order.labelBought && <ExportQuote order={order} onUpdate={onUpdate} />}
       <div
         className={`grid grid-cols-2 gap-2 border-t p-3 ${handled ? "border-neutral-200 sm:grid-cols-2 dark:border-neutral-800" : "border-neutral-100 sm:grid-cols-[1fr_1fr_auto_auto] dark:border-neutral-800"}`}

@@ -7,6 +7,7 @@ import { boxForOrder } from "../lib/boxes.js";
 import { moveStock } from "../lib/stock.js";
 import { profit, refreshLabelEstimates } from "../lib/financials.js";
 import { quoteContext } from "../lib/exportRate.js";
+import { relinkOpenOrders } from "../lib/orderLines.js";
 
 const partSchema = z.object({ partId: z.string(), quantity: z.number().int().positive() });
 const create = z.object({
@@ -22,6 +23,8 @@ const create = z.object({
 });
 const update = create.partial().extend({
   parts: z.array(partSchema).optional(),
+  /** Link this order to a replacement it ships (null = unlink). */
+  replacementId: z.string().nullable().optional(),
   packed: z.boolean().optional(),
   labelBought: z.boolean().optional(),
   readyBy: z.coerce.date().nullable().optional(),
@@ -43,6 +46,8 @@ const update = create.partial().extend({
 
 type Quoter = Awaited<ReturnType<typeof quoteContext>>;
 /** Adds the order's box, packed weight and (going abroad) its Simple Export Rate quote. */
+const ORDER_INCLUDE = { parts: { include: { part: true } }, replacement: { select: { id: true, code: true, buyerName: true, shipped: true } } } as const;
+
 function withBox<T extends Parameters<Quoter["quote"]>[0]>(order: T, ctx: Quoter) {
   return { ...order, boxName: boxForOrder(order), ...ctx.quote(order) };
 }
@@ -52,7 +57,7 @@ export default async function orderRoutes(app: FastifyInstance) {
     const q = z.object({ status: z.string().optional() }).parse(req.query);
     const rows = await db.order.findMany({
       where: q.status ? { status: q.status } : undefined,
-      include: { parts: { include: { part: true } } },
+      include: ORDER_INCLUDE,
       orderBy: { orderedAt: "desc" },
     });
     const ctx = await quoteContext();
@@ -61,7 +66,7 @@ export default async function orderRoutes(app: FastifyInstance) {
 
   app.get("/orders/:id", async (req) => {
     const { id } = req.params as { id: string };
-    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } }), await quoteContext());
+    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE }), await quoteContext());
   });
 
   app.post("/orders", async (req, reply) => {
@@ -72,10 +77,25 @@ export default async function orderRoutes(app: FastifyInstance) {
     return row;
   });
 
-  app.put("/orders/:id", async (req) => {
+  app.put("/orders/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const { parts, packed, labelBought, ...rest } = update.parse(req.body);
+    const { parts: pickedParts, packed, labelBought, replacementId, ...rest } = update.parse(req.body);
     const existing = await db.order.findUniqueOrThrow({ where: { id }, include: { parts: true } });
+    let parts = pickedParts;
+    let link: { replacementId?: string | null; partsManual?: boolean } = {};
+
+    if (replacementId !== undefined && replacementId !== existing.replacementId) {
+      if (replacementId) {
+        const r = await db.replacement.findUnique({ where: { id: replacementId }, include: { parts: true, order: { select: { id: true, etsyOrderId: true } } } });
+        if (!r) return reply.code(404).send({ error: "That replacement no longer exists." });
+        if (r.order && r.order.id !== id) return reply.code(409).send({ error: `${r.code} is already linked to Etsy order #${r.order.etsyOrderId}.` });
+        // The order ships the replacement's parts (unless they're already off the shelf).
+        if (!existing.packed && !parts) parts = r.parts.map((p) => ({ partId: p.partId, quantity: p.quantity }));
+      }
+      link = { replacementId };
+    }
+    if (parts && existing.packed) return reply.code(409).send({ error: "This order is already packed: un-pack it first to change its parts." });
+    if (parts) link.partsManual = true;
 
     await db.$transaction(async (tx) => {
       if (parts) {
@@ -85,6 +105,7 @@ export default async function orderRoutes(app: FastifyInstance) {
         where: { id },
         data: {
           ...rest,
+          ...link,
           ...(packed !== undefined ? { packed } : {}),
           ...(labelBought !== undefined && labelBought !== existing.labelBought ? { labelBought, labelBoughtAt: labelBought ? new Date() : null } : {}),
           ...(parts ? { parts: { create: parts } } : {}),
@@ -101,7 +122,18 @@ export default async function orderRoutes(app: FastifyInstance) {
     }
     if (rest.shipWeightOz !== undefined) await refreshLabelEstimates();
     await rebuildQueue();
-    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: { parts: { include: { part: true } } } }), await quoteContext());
+    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE }), await quoteContext());
+  });
+
+  /** Drop hand-picked parts and go back to whatever the Listing Map links. */
+  app.post("/orders/:id/auto-parts", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const o = await db.order.findUniqueOrThrow({ where: { id } });
+    if (o.packed) return reply.code(409).send({ error: "This order is already packed: un-pack it first to change its parts." });
+    await db.$transaction([db.orderPart.deleteMany({ where: { orderId: id } }), db.order.update({ where: { id }, data: { partsManual: false } })]);
+    await relinkOpenOrders();
+    await rebuildQueue();
+    return withBox(await db.order.findUniqueOrThrow({ where: { id }, include: ORDER_INCLUDE }), await quoteContext());
   });
 
   /** Pack (or un-pack) several orders at once; orders already in that state are skipped. */

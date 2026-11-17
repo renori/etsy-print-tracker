@@ -17,7 +17,7 @@ async function neededQuantities(): Promise<Map<string, number>> {
   });
   for (const o of orders) for (const p of o.parts) need.set(p.partId, (need.get(p.partId) ?? 0) + p.quantity);
 
-  const replacements = await db.replacement.findMany({ where: { shipped: false }, include: { parts: true } });
+  const replacements = await db.replacement.findMany({ where: { shipped: false, order: null }, include: { parts: true } });
   for (const r of replacements) for (const p of r.parts) need.set(p.partId, (need.get(p.partId) ?? 0) + p.quantity);
 
   return need;

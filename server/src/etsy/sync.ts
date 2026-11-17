@@ -7,6 +7,7 @@ import { rebuildQueue } from "../scheduler/queue.js";
 import { ORDER_STATUS } from "../lib/constants.js";
 import { moveStock } from "../lib/stock.js";
 import { refreshElectricitySoon } from "../lib/electricity.js";
+import { shipLinkedReplacementsSoon } from "../lib/replacements.js";
 
 // NOTE: field names below follow Etsy's Open API v3 ("Receipts" / "Ledger
 // Entries") shape as documented at https://developer.etsy.com/documentation/reference
@@ -427,6 +428,7 @@ export async function syncNow() {
   if (digital + digitalAfter) await rebuildQueue();
   const shipInfoFilled = await backfillShipInfo();
   const labelsEstimated = await refreshLabelEstimates();
+  await shipLinkedReplacementsSoon(); // a linked replacement ships with its Etsy order
   await refreshElectricitySoon(); // orders completed on Etsy count toward this month's electricity
   return { receipts, openOrders, shippedOnEtsy, digital: digital + digitalAfter, ledger, financials: { ...financials, labelsEstimated, shipInfoFilled } };
 }

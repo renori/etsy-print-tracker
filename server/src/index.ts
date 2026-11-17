@@ -24,6 +24,7 @@ import exportRateRoutes from "./routes/exportRates.js";
 import taxExportRoutes from "./routes/taxExport.js";
 import electricityRoutes from "./routes/electricity.js";
 import { refreshElectricitySoon } from "./lib/electricity.js";
+import { shipLinkedReplacementsSoon } from "./lib/replacements.js";
 import summaryRoutes from "./routes/summary.js";
 import { startEtsySyncJob } from "./etsy/sync.js";
 import { repairUtcMidnightDates } from "./lib/dates.js";
@@ -47,7 +48,10 @@ await app.register(cors, { origin: true });
 // listing mapped, an import...) can move a month's electricity COGS, so the
 // monthly electricity expenses are refreshed after every successful change.
 app.addHook("onResponse", async (req, reply) => {
-  if (req.method !== "GET" && req.url.startsWith("/api/") && !req.url.startsWith("/api/electricity") && reply.statusCode < 400) void refreshElectricitySoon();
+  if (req.method !== "GET" && req.url.startsWith("/api/") && !req.url.startsWith("/api/electricity") && reply.statusCode < 400) {
+    void shipLinkedReplacementsSoon(); // an order shipping a replacement marks it shipped
+    void refreshElectricitySoon();
+  }
 });
 
 // Everything the frontend calls lives under /api — in dev the Vite proxy
@@ -96,6 +100,7 @@ const repaired = await repairUtcMidnightDates();
 if (repaired) app.log.info(`Moved ${repaired} date(s) saved as UTC midnight to the correct day`);
 const digital = await markDigitalOrders();
 if (digital) app.log.info(`Marked ${digital} digital-download order(s): no shipping label`);
+await shipLinkedReplacementsSoon();
 await refreshElectricitySoon();
 const reestimated = await refreshLabelEstimates();
 if (reestimated) app.log.info(`Updated ${reestimated} label cost estimate(s)`);

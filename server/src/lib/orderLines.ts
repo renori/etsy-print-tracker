@@ -80,7 +80,7 @@ const same = (a: { partId: string; quantity: number }[], b: { partId: string; qu
 export async function relinkOpenOrders(): Promise<number> {
   const mappings = await loadMappings();
   const orders = await db.order.findMany({
-    where: { status: { not: "SHIPPED" }, packed: false, etsyLines: { not: null } },
+    where: { status: { not: "SHIPPED" }, packed: false, partsManual: false, etsyLines: { not: null } },
     include: { parts: true },
   });
   let changed = 0;
@@ -101,7 +101,7 @@ export async function relinkOpenOrders(): Promise<number> {
 export async function unmappedSales() {
   const mappings = await loadMappings();
   const orders = await db.order.findMany({
-    where: { status: { not: "SHIPPED" }, etsyLines: { not: null } },
+    where: { status: { not: "SHIPPED" }, partsManual: false, etsyLines: { not: null } },
     include: { _count: { select: { parts: true } } },
     orderBy: { orderedAt: "asc" },
   });

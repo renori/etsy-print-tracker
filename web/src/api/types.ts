@@ -151,6 +151,11 @@ export interface Order {
   netProfit?: number | null;
   margin?: number | null;
   parts: OrderPart[];
+  /** Parts picked by hand on the order (Listing Map changes leave them alone). */
+  partsManual?: boolean;
+  /** The replacement this Etsy order ships, if linked. */
+  replacementId?: string | null;
+  replacement?: { id: string; code: string; buyerName: string; shipped: boolean } | null;
   /** Resolved by the server: the order's package, else the biggest one its parts need. */
   boxName?: string | null;
 }
@@ -198,6 +203,8 @@ export interface Replacement {
   cogsLoggedAt?: string | null;
   labelLoggedAt?: string | null;
   parts: ListingMappingPart[];
+  /** The Etsy order shipping this replacement, if linked. */
+  order?: { id: string; etsyOrderId: string; status: string } | null;
 }
 
 export interface Expense {

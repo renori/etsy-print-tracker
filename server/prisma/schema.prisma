@@ -202,6 +202,12 @@ model Order {
   netProfit       Float?
   margin          Float?
 
+  /// Parts were picked by hand on the order: Listing Map changes leave them alone.
+  partsManual     Boolean     @default(false)
+  /// This Etsy order ships a replacement (e.g. a private listing made for it).
+  replacementId   String?     @unique
+  replacement     Replacement? @relation(fields: [replacementId], references: [id], onDelete: SetNull)
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -233,6 +239,8 @@ model Replacement {
   labelLoggedAt    DateTime?
 
   parts            ReplacementPart[]
+  /// The Etsy order shipping this replacement, if any.
+  order            Order?
 }
 
 model ReplacementPart {
