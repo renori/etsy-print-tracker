@@ -81,6 +81,7 @@ const PATHS = {
   alert: "M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
   clock: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z",
   chevron: "M9 6l6 6-6 6",
+  chevronLeft: "M15 6l-6 6 6 6",
   refresh: "M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4",
   upload: "M12 16V4M7 9l5-5 5 5M4 20h16",
 } as const;

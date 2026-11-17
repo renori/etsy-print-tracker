@@ -10,6 +10,7 @@ import { localDateInput, type FieldConfig, type Suggestion } from "../components
 import { fmtDate, fmtMoney } from "../lib/format";
 import { ExpenseImport } from "./ExpenseImport";
 import { Button } from "../components/ui";
+import { ExpenseMonth } from "./ExpenseMonth";
 
 const columns: Column<Expense>[] = [
   { key: "date", label: "Date", render: (e) => fmtDate(e.date) },
@@ -79,6 +80,7 @@ export function Expenses() {
 
   return (
     <div>
+      <ExpenseMonth rows={rows ?? []} />
       <ResourceTablePage
         title="Expenses"
         itemLabel="expense"
