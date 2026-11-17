@@ -39,6 +39,10 @@ services:
       WATCHTOWER_POLL_INTERVAL: "300"
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_LABEL_ENABLE: "true"
+    # Watchtower 1.24's built-in self-check reports "unhealthy" on some NAS
+    # Docker setups even while updates work fine, so it's switched off.
+    healthcheck:
+      disable: true
 
 volumes:
   tracker-data:

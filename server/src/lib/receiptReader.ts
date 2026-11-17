@@ -127,17 +127,28 @@ function lastFour(text: string): string | null {
 
 const AMAZON_ORDER = /\b(\d{3}-\d{7}-\d{7})\b/g;
 
-/** Product-looking lines: long enough, mostly letters, not boilerplate. */
+/** Lines that are never a product: page furniture, payment, delivery, seller and address lines. Whole words only. */
+const BOILERPLATE =
+  /\b(order(s|ed)?|ship(ping|ped|s)?|ship to|deliver(y|ed)?|arriv(ing|es|ed)|track(ing)?|total|subtotal|tax|payment|visa|mastercard|amex|card ending|ending in|address|return(s|ed)?|refund(ed)?|qty|quantity|sold by|supplied by|condition|price|hello|thank(s| you)?|view|manage|account|prime|amazon\.com|invoice|page \d|gift|estimated|seller|buy it again|write a review|print|united states|usa)\b/i;
+
+/** Product-looking lines: long enough, mostly letters, not boilerplate, not inside a "Ship to" address block. */
 function productLines(text: string): string[] {
-  const skip =
-    /order|ship|deliver|arriv|track|total|subtotal|tax|payment|visa|mastercard|amex|card|ending|address|return|refund|qty|quantity|sold by|condition|price|hello|thank|view|manage|account|prime|amazon\.com|invoice|page \d|gift|estimated|seller|buy it again|write a review|business/i;
-  return text
-    .split(/\r?\n/)
-    .map((l) => l.replace(MONEY, "").replace(/^\d+\s+of:\s*/i, "").replace(/\s+/g, " ").trim())
-    .filter((l) => l.length >= 12 && l.length <= 200 && !skip.test(l) && (l.match(/[a-z]/gi)?.length ?? 0) / l.length > 0.55);
+  const lines = text.split(/\r?\n/).map((l) => l.replace(MONEY, "").replace(/^\d+\s+of:\s*/i, "").replace(/\s+/g, " ").trim());
+  // The address under "Ship to" runs until "Payment method" (or a blank line).
+  const inAddress = new Set<number>();
+  lines.forEach((l, i) => {
+    if (!/^(ship(ping)? to|shipping address|deliver(ed)? to)\b/i.test(l)) return;
+    for (let j = i + 1; j < lines.length && j <= i + 6 && lines[j] && !/payment|order summary/i.test(lines[j]); j++) inAddress.add(j);
+  });
+  const looksLikeProduct = (l: string, i: number) =>
+    !inAddress.has(i) && l.length >= 12 && l.length <= 300 && !BOILERPLATE.test(l) && (l.match(/[a-z]/gi)?.length ?? 0) / l.length > 0.55;
+  // Amazon puts "Sold by: …" right under each product title: when those are there, trust them.
+  const titled = lines.flatMap((l, i) => (/^sold by\b/i.test(l) ? [lines.slice(0, i).reverse().find((x) => x)] : [])).filter((l): l is string => !!l);
+  const picks = titled.length ? titled.filter((l) => l.length >= 12) : lines.filter(looksLikeProduct);
+  return [...new Set(picks)];
 }
 
-function amazonDrafts(text: string): ExpenseDraft[] | null {
+export function amazonDrafts(text: string): ExpenseDraft[] | null {
   if (!/amazon/i.test(text) && !AMAZON_ORDER.test(text)) return null;
   AMAZON_ORDER.lastIndex = 0;
   const orders = [...text.matchAll(AMAZON_ORDER)];
@@ -208,6 +219,8 @@ const KEYWORDS: [RegExp, string][] = [
   [/file|plier|tweezer|deburr|scraper|caliper|knife|tool/i, "Tools"],
   [/license|subscription|software|solidworks|fusion|adobe/i, "Software"],
 ];
+
+export const guessCategory = (item: string) => KEYWORDS.find(([re]) => re.test(item))?.[1] ?? null;
 
 async function categorize(drafts: ExpenseDraft[]): Promise<ExpenseDraft[]> {
   const history = await db.expense.findMany({ orderBy: { date: "desc" }, take: 1000 });
