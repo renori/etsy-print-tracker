@@ -128,7 +128,7 @@ export interface SyncResult {
   shippedOnEtsy: { added: number };
   digital?: number;
   ledger: { fetched: number };
-  financials: { filled: number; labelsEstimated: number };
+  financials: { filled: number; labelsEstimated: number; shipInfoFilled?: number };
 }
 
 /** One line for the user: what the sync changed. */
@@ -141,7 +141,7 @@ export function describeSync(r: SyncResult, newOrders: number): string {
     r.openOrders.canceled && `${r.openOrders.canceled} canceled`,
     r.digital && `${r.digital} digital download${r.digital === 1 ? "" : "s"} (no label)`,
     r.financials.filled && `profit filled for ${r.financials.filled}`,
-    r.financials.labelsEstimated && `${r.financials.labelsEstimated} label cost${r.financials.labelsEstimated === 1 ? "" : "s"} estimated`,
+    r.financials.labelsEstimated && `${r.financials.labelsEstimated} label estimate${r.financials.labelsEstimated === 1 ? "" : "s"} updated`,
   ].filter(Boolean);
   return parts.length ? `Synced · ${parts.join(" · ")}` : "Synced · nothing new";
 }

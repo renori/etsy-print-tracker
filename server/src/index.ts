@@ -23,7 +23,7 @@ import boxRoutes from "./routes/boxes.js";
 import summaryRoutes from "./routes/summary.js";
 import { startEtsySyncJob } from "./etsy/sync.js";
 import { repairUtcMidnightDates } from "./lib/dates.js";
-import { markDigitalOrders } from "./lib/financials.js";
+import { markDigitalOrders, refreshLabelEstimates } from "./lib/financials.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -74,6 +74,8 @@ const repaired = await repairUtcMidnightDates();
 if (repaired) app.log.info(`Moved ${repaired} date(s) saved as UTC midnight to the correct day`);
 const digital = await markDigitalOrders();
 if (digital) app.log.info(`Marked ${digital} digital-download order(s): no shipping label`);
+const reestimated = await refreshLabelEstimates();
+if (reestimated) app.log.info(`Updated ${reestimated} label cost estimate(s)`);
 
 const port = Number(process.env.PORT ?? 9999);
 await app.listen({ port, host: "0.0.0.0" });

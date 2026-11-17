@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { db } from "../lib/db.js";
 import { etsyGet, isEtsyConnected } from "./client.js";
 import { loadMappings, parseLines, relinkOpenOrders, resolveLines, type OrderLine } from "../lib/orderLines.js";
-import { applyFinancials, estimateMissingLabels, markDigitalOrders, refsFromStoredLines, type SaleRefs } from "../lib/financials.js";
+import { applyFinancials, markDigitalOrders, refreshLabelEstimates, refsFromStoredLines, type SaleRefs } from "../lib/financials.js";
 import { rebuildQueue } from "../scheduler/queue.js";
 import { ORDER_STATUS } from "../lib/constants.js";
 import { moveStock } from "../lib/stock.js";
@@ -41,6 +41,8 @@ interface EtsyReceipt {
   create_timestamp: number;
   expected_ship_date?: number;
   is_shipped: boolean;
+  /** Destination country, e.g. "US", "CA". */
+  country_iso?: string | null;
   /** e.g. "Paid", "Completed", "Canceled", "Fully Refunded" (casing varies). */
   status?: string;
   shipments?: EtsyShipment[];
@@ -91,6 +93,14 @@ function labelInfo(r: EtsyReceipt) {
   };
 }
 
+/** Where it ships and what the buyer paid for shipping: the label estimate leans on these. */
+function shipInfo(r: EtsyReceipt) {
+  return {
+    shipCountry: r.country_iso ? r.country_iso.toUpperCase() : "",
+    shippingPaid: r.total_shipping_cost ? money(r.total_shipping_cost) : null,
+  };
+}
+
 function linesOf(r: EtsyReceipt): OrderLine[] {
   return (r.transactions ?? []).map((t) => ({
     listingId: String(t.listing_id),
@@ -137,6 +147,7 @@ export async function syncReceipts() {
         status: ORDER_STATUS.NEEDS_PRINTING,
         orderTotal: money(receipt.grandtotal),
         salesTax: money(receipt.total_tax_cost),
+        ...shipInfo(receipt),
         ...(labelInfo(receipt) ?? {}),
         parts: { create: parts },
       },
@@ -230,7 +241,7 @@ export async function syncOpenOrders() {
         continue;
       }
 
-      const data: Record<string, unknown> = {};
+      const data: Record<string, unknown> = o.shipCountry == null ? shipInfo(receipt) : {};
       const info = labelInfo(receipt);
       if (info && !o.labelBought) {
         Object.assign(data, info);
@@ -299,6 +310,7 @@ export async function syncShippedReceipts() {
           shippedAt: (info?.labelBoughtAt as Date | undefined) ?? new Date(),
           orderTotal: money(r.grandtotal),
           salesTax: money(r.total_tax_cost),
+          ...shipInfo(r),
           parts: { create: parts },
         },
       });
@@ -342,9 +354,11 @@ export async function syncFinancials() {
     let refs: SaleRefs = refsFromStoredLines(o);
     try {
       const r = await etsyGet<EtsyReceipt & { shipments?: (EtsyShipment & { receipt_shipping_id?: number })[] }>(`/shops/${shopId}/receipts/${o.etsyOrderId}`);
+      const refresh: Record<string, unknown> = o.shipCountry == null ? shipInfo(r) : {};
       if (linesNeedRefresh(o.etsyLines) && r.transactions?.some((t) => typeof t.is_digital === "boolean")) {
-        await db.order.update({ where: { id: o.id }, data: { etsyLines: JSON.stringify(linesOf(r)) } });
+        refresh.etsyLines = JSON.stringify(linesOf(r));
       }
+      if (Object.keys(refresh).length) await db.order.update({ where: { id: o.id }, data: refresh });
       refs = {
         receiptId: o.etsyOrderId,
         transactionIds: (r.transactions ?? []).map((t) => String(t.transaction_id)),
@@ -367,6 +381,40 @@ export async function syncFinancials() {
   return { checked: orders.length, filled };
 }
 
+/**
+ * Older orders (incl. ones imported from the sheet) predate storing the
+ * destination and buyer-paid shipping. Fill those in a batch per sync, known
+ * label costs first since every estimate is worked out from them.
+ */
+export async function backfillShipInfo(limit = 60) {
+  const shopId = process.env.ETSY_SHOP_ID;
+  if (!shopId) throw new Error("ETSY_SHOP_ID is not set");
+  const todo = await db.order.findMany({
+    where: { shipCountry: null, digital: false },
+    orderBy: [{ labelCost: { sort: "desc", nulls: "last" } }, { orderedAt: "desc" }],
+    take: limit * 2,
+  });
+  const known = (o: (typeof todo)[number]) => o.labelCost != null && o.labelCostSource !== "estimate";
+  todo.sort((a, b) => Number(known(b)) - Number(known(a)) || b.orderedAt.getTime() - a.orderedAt.getTime());
+  let filled = 0;
+  for (const o of todo.slice(0, limit)) {
+    if (!/^\d+$/.test(o.etsyOrderId)) {
+      await db.order.update({ where: { id: o.id }, data: { shipCountry: "" } });
+      continue;
+    }
+    try {
+      const r = await etsyGet<EtsyReceipt>(`/shops/${shopId}/receipts/${o.etsyOrderId}`);
+      await db.order.update({ where: { id: o.id }, data: shipInfo(r) });
+      filled++;
+    } catch (err) {
+      // Not on Etsy (404) = never will be; anything else is retried next sync.
+      if (/failed: (400|404)/.test(String(err))) await db.order.update({ where: { id: o.id }, data: { shipCountry: "" } });
+      else console.error(`[etsy-sync] couldn't read receipt ${o.etsyOrderId} for shipping info:`, err);
+    }
+  }
+  return filled;
+}
+
 export async function syncNow() {
   const receipts = await syncReceipts();
   const openOrders = await syncOpenOrders();
@@ -376,8 +424,9 @@ export async function syncNow() {
   const financials = await syncFinancials();
   const digitalAfter = await markDigitalOrders(); // older orders whose lines the financials pass just refreshed
   if (digital + digitalAfter) await rebuildQueue();
-  const labelsEstimated = await estimateMissingLabels();
-  return { receipts, openOrders, shippedOnEtsy, digital: digital + digitalAfter, ledger, financials: { ...financials, labelsEstimated } };
+  const shipInfoFilled = await backfillShipInfo();
+  const labelsEstimated = await refreshLabelEstimates();
+  return { receipts, openOrders, shippedOnEtsy, digital: digital + digitalAfter, ledger, financials: { ...financials, labelsEstimated, shipInfoFilled } };
 }
 
 export function startEtsySyncJob() {

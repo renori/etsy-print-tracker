@@ -187,6 +187,12 @@ model Order {
   /// Where labelCost came from: "etsy" (ledger match), "batch" (paired within a batch of labels
   /// bought together), "estimate" (typical cost for the box size), "manual" (typed in), "digital" (download, $0), null (imported).
   labelCostSource String?
+  /// How an estimated label cost was worked out, e.g. "median of 6 past labels to CA, 9x6x2 box".
+  labelCostNote   String?
+  /// Destination country (ISO code, e.g. "US", "CA") from the Etsy receipt; "" = looked up, unknown.
+  shipCountry     String?
+  /// Shipping the buyer paid on Etsy (0 = free shipping).
+  shippingPaid    Float?
   productionCost  Float?
   laborMinutes    Float?
   netProfit       Float?

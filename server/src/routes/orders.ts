@@ -91,7 +91,7 @@ export default async function orderRoutes(app: FastifyInstance) {
 
     if (rest.labelCost !== undefined) {
       // Typed in = always kept; cleared = the next sync estimates it again.
-      const o = await db.order.update({ where: { id }, data: { labelCostSource: rest.labelCost == null ? null : "manual" } });
+      const o = await db.order.update({ where: { id }, data: { labelCostSource: rest.labelCost == null ? null : "manual", labelCostNote: null } });
       await db.order.update({ where: { id }, data: profit(o) });
     }
     await rebuildQueue();

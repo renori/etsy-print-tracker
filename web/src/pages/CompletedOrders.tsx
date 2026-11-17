@@ -6,6 +6,17 @@ import { Button, PageHeader } from "../components/ui";
 
 const pct = (m: number | null | undefined) => (m != null ? `${Math.round(m * 100)}%` : "—");
 
+/** Country code for orders shipped abroad (blank for domestic / unknown). */
+function Dest({ order }: { order: Order }) {
+  const c = order.shipCountry;
+  if (!c || c === "US") return null;
+  return (
+    <span className="ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-300" title={`Shipped to ${c}`}>
+      {c}
+    </span>
+  );
+}
+
 /** Label cost: shows the amount; tap to type one (net and margin recalculate). */
 function LabelCost({ order }: { order: Order }) {
   const { mutate: update, isPending } = ordersApi.useUpdate();
@@ -33,7 +44,7 @@ function LabelCost({ order }: { order: Order }) {
         onClick={start}
         title={
           est
-            ? "Estimated from past labels for this box size — tap to enter the real cost"
+            ? `Estimate: ${order.labelCostNote ?? "from past labels"}. Tap to enter the real cost.`
             : digital
               ? "Digital download — no shipping label"
             : batch
@@ -119,8 +130,9 @@ export function CompletedOrders() {
       )}
       {estimated > 0 && (
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          <span className="italic">≈</span> {estimated} label cost{estimated === 1 ? " is an estimate" : "s are estimates"} (typical cost for that box size); they update
-          automatically if Etsy's ledger gives an exact match, or tap one to enter the real cost.{" "}
+          <span className="italic">≈</span> {estimated} label cost{estimated === 1 ? " is an estimate" : "s are estimates"}, based mostly on the shipping the
+          buyer paid, then destination and box size (hover one to see how). They update automatically if Etsy's ledger gives an exact match, or tap
+          one to enter the real cost.{" "}
           <span className="text-neutral-400">*</span> = from a batch of labels bought together (batch total exact).
         </p>
       )}
@@ -139,12 +151,18 @@ export function CompletedOrders() {
             {shipped.map((o) => (
               <li key={o.id} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="font-semibold">{o.buyerName}</span>
+                  <span className="font-semibold">
+                    {o.buyerName}
+                    <Dest order={o} />
+                  </span>
                   <span className="font-semibold tabular-nums">{fmtMoney(o.netProfit)}</span>
                 </div>
                 <div className="text-xs text-neutral-500">
                   #{o.etsyOrderId} · shipped {fmtDate(o.shippedAt)} · {pct(o.margin)} margin
                 </div>
+                {o.labelCostSource === "estimate" && o.labelCostNote && (
+                  <p className="mt-1 text-xs text-neutral-500 italic">≈ label: {o.labelCostNote}</p>
+                )}
                 <dl className="mt-2 grid grid-cols-4 gap-2 text-xs">
                   <div>
                     <dt className="text-neutral-500">Gross</dt>
@@ -172,7 +190,7 @@ export function CompletedOrders() {
             <table className="w-full text-left text-sm">
               <thead className="bg-neutral-50 dark:bg-neutral-900">
                 <tr>
-                  {["Order", "Buyer", "Shipped", "Gross", "Tax", "Fees", "Label", "Production", "Net profit", "Margin"].map((h) => (
+                  {["Order", "Buyer", "Shipped", "Gross", "Tax", "Fees", "Ship paid", "Label", "Production", "Net profit", "Margin"].map((h) => (
                     <th key={h} className="px-3 py-2.5 font-medium text-neutral-600 dark:text-neutral-400">
                       {h}
                     </th>
@@ -183,11 +201,15 @@ export function CompletedOrders() {
                 {shipped.map((o) => (
                   <tr key={o.id} className="border-t border-neutral-100 dark:border-neutral-800">
                     <td className="px-3 py-2">{o.etsyOrderId}</td>
-                    <td className="px-3 py-2">{o.buyerName}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {o.buyerName}
+                      <Dest order={o} />
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(o.shippedAt)}</td>
                     <td className="px-3 py-2 tabular-nums">{fmtMoney(o.etsyGross)}</td>
                     <td className="px-3 py-2 tabular-nums">{fmtMoney(o.salesTax)}</td>
                     <td className="px-3 py-2 tabular-nums">{fmtMoney(o.etsyFees)}</td>
+                    <td className="px-3 py-2 tabular-nums text-neutral-500">{o.shippingPaid != null ? fmtMoney(o.shippingPaid) : "—"}</td>
                     <td className="px-1 py-1">
                       <LabelCost order={o} />
                     </td>

@@ -84,6 +84,7 @@ export async function applyFinancials(orderId: string, refs: SaleRefs): Promise<
   const label = await labelFor(order, refs);
   const labelCost = label?.cost ?? order.labelCost;
   const labelCostSource = label?.source ?? order.labelCostSource;
+  const labelCostNote = label ? (label.note ?? null) : order.labelCostNote;
 
   const prod = await productionFor(orderId);
   const data = {
@@ -93,6 +94,7 @@ export async function applyFinancials(orderId: string, refs: SaleRefs): Promise<
     etsyEarnings: earnings,
     labelCost,
     labelCostSource,
+    labelCostNote,
     ...prod,
   };
   await db.order.update({ where: { id: orderId }, data: { ...data, ...profit(data) } });
@@ -121,33 +123,97 @@ const median = (xs: number[]) => {
   return v.length ? round(v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2) : null;
 };
 
+export interface PastLabel {
+  cost: number;
+  paid: number | null;
+  country: string | null;
+  box: string | null;
+}
+
+/** Home country for "domestic vs international" (Etsy ISO code). */
+const HOME = (process.env.HOME_COUNTRY || "US").toUpperCase();
+const country = (c: string | null | undefined) => (c ? c.toUpperCase() : null);
+const region = (c: string | null) => (c == null ? null : c === HOME ? "domestic" : "international");
+
 /**
- * Typical label cost per box size, from orders whose label cost is known
- * (ledger-matched, typed in, or imported from the sheet). "*" = all boxes.
+ * Orders whose label cost is known (ledger-matched, batch-paired, typed in, or
+ * imported from the sheet): what estimates are worked out from.
  */
-export async function labelCostByBox(): Promise<Map<string, { cost: number; n: number }>> {
+export async function pastLabels(): Promise<PastLabel[]> {
   const known = await db.order.findMany({
     where: { digital: false, labelCost: { not: null, gt: 0 }, OR: [{ labelCostSource: null }, { labelCostSource: { in: ["etsy", "manual", "batch"] } }] },
     include: { parts: { include: { part: true } } },
     orderBy: { orderedAt: "desc" },
-    take: 500,
+    take: 1000,
   });
-  const groups = new Map<string, number[]>();
-  for (const o of known) {
+  return known.map((o) => {
     const box = boxForOrder(o);
-    for (const k of [box ? normBoxName(box) : null, "*"]) {
-      if (!k) continue;
-      groups.set(k, [...(groups.get(k) ?? []), o.labelCost!]);
-    }
-  }
-  return new Map([...groups].map(([k, xs]) => [k, { cost: median(xs)!, n: xs.length }]));
+    return { cost: o.labelCost!, paid: o.shippingPaid, country: country(o.shipCountry), box: box ? normBoxName(box) : null };
+  });
 }
 
-async function estimateFor(orderId: string, byBox?: Map<string, { cost: number; n: number }>) {
-  const table = byBox ?? (await labelCostByBox());
+type EstimateTarget = { shippingPaid: number | null; shipCountry: string | null; box: string | null };
+const dollars = (n: number) => `$${n.toFixed(2)}`;
+const labels = (n: number, w: string) => `${n} past label${n === 1 ? "" : "s"}${w}`;
+
+/**
+ * Estimated label cost, with a note on how it was worked out. What the buyer
+ * paid for shipping counts most (Etsy's calculated shipping tracks the real
+ * label price, destination and weight included):
+ *  1. median of past labels where the buyer paid about the same shipping
+ *     (same country preferred);
+ *  2. shipping paid x the usual label / shipping-paid ratio (same country, else
+ *     domestic/international, else all);
+ *  3. free shipping or nothing comparable: median by destination and box size.
+ */
+export function estimateLabel(t: EstimateTarget, past: PastLabel[]): { cost: number; note: string } | null {
+  const c = country(t.shipCountry);
+  const reg = region(c);
+  const box = t.box ? normBoxName(t.box) : null;
+  const costs = (x: PastLabel[]) => x.map((p) => p.cost);
+  const place = c ? (c === HOME ? " (domestic)" : ` to ${c}`) : "";
+
+  const paid = t.shippingPaid;
+  if (paid != null && paid > 0) {
+    const near = past.filter((p) => p.paid != null && p.paid > 0 && Math.abs(p.paid - paid) <= Math.max(0.5, paid * 0.1));
+    const nearHere = c ? near.filter((p) => p.country === c) : [];
+    const nearSets: [PastLabel[], string][] = [
+      [nearHere, `${place} where the buyer paid ~${dollars(paid)} shipping`],
+      [near, ` where the buyer paid ~${dollars(paid)} shipping`],
+    ];
+    for (const [set, desc] of nearSets) {
+      if (set.length >= 2) return { cost: median(costs(set))!, note: `median of ${labels(set.length, desc)}` };
+    }
+    const withPaid = past.filter((p) => p.paid != null && p.paid > 0);
+    const groups: [PastLabel[], string][] = [
+      [c ? withPaid.filter((p) => p.country === c) : [], c === HOME ? "domestic" : (c ?? "")],
+      [reg ? withPaid.filter((p) => region(p.country) === reg) : [], reg ?? ""],
+      [withPaid, "all"],
+    ];
+    for (const [set, desc] of groups) {
+      if (set.length < 3) continue;
+      const ratio = median(set.map((p) => p.cost / p.paid!))!;
+      return {
+        cost: round(paid * ratio),
+        note: `buyer paid ${dollars(paid)} shipping x ${Math.round(ratio * 100)}% (usual label / shipping paid on ${set.length} ${desc} orders)`,
+      };
+    }
+  }
+
+  const tiers: [PastLabel[], string][] = [
+    [c && box ? past.filter((p) => p.country === c && p.box === box) : [], `${place}, ${t.box} box`],
+    [reg && box ? past.filter((p) => region(p.country) === reg && p.box === box) : [], `, ${reg}, ${t.box} box`],
+    [c ? past.filter((p) => p.country === c) : [], place],
+    [reg ? past.filter((p) => region(p.country) === reg) : [], `, ${reg}`],
+    [box ? past.filter((p) => p.box === box) : [], `, ${t.box} box`],
+  ];
+  for (const [set, desc] of tiers) if (set.length >= 2) return { cost: median(costs(set))!, note: `median of ${labels(set.length, desc)}` };
+  return past.length ? { cost: median(costs(past))!, note: `median of all ${past.length} past labels (nothing closer to compare)` } : null;
+}
+
+async function estimateFor(orderId: string, past?: PastLabel[]) {
   const o = await db.order.findUniqueOrThrow({ where: { id: orderId }, include: { parts: { include: { part: true } } } });
-  const box = boxForOrder(o);
-  return (box && table.get(normBoxName(box))) || table.get("*") || null;
+  return estimateLabel({ shippingPaid: o.shippingPaid, shipCountry: o.shipCountry, box: boxForOrder(o) }, past ?? (await pastLabels()));
 }
 
 /**
@@ -159,7 +225,7 @@ async function estimateFor(orderId: string, byBox?: Map<string, { cost: number; 
  *  3. "estimate" the median label cost of past orders in the same box size
  * A cost typed by hand ("manual") is never replaced.
  */
-async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number; source: string } | null> {
+async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number; source: string; note?: string } | null> {
   if (order.labelCostSource === "manual") return null;
   if (order.labelCostSource == null && order.labelCost != null) return null; // imported from the sheet
   if (order.digital) return { cost: 0, source: "digital" }; // downloads have no label
@@ -175,8 +241,8 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
     const labels = await db.etsyLedgerEntry.findMany({ where: { ledgerType: "shipping_labels", createdAt: window }, orderBy: [{ amount: "desc" }, { etsyEntryId: "asc" }] });
     const batch = await db.order.findMany({ where: { labelBoughtAt: window, digital: false }, orderBy: { id: "asc" } });
     if (labels.length && labels.length === batch.length) {
-      const table = await labelCostByBox();
-      const expected = await Promise.all(batch.map(async (o) => ({ id: o.id, est: (await estimateFor(o.id, table))?.cost ?? 0 })));
+      const past = await pastLabels();
+      const expected = await Promise.all(batch.map(async (o) => ({ id: o.id, est: (await estimateFor(o.id, past))?.cost ?? 0 })));
       expected.sort((a, b) => a.est - b.est || a.id.localeCompare(b.id));
       const costs = labels.map((e) => round(-e.amount)).sort((a, b) => a - b);
       const i = expected.findIndex((x) => x.id === order.id);
@@ -188,19 +254,26 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
   }
 
   const est = await estimateFor(order.id);
-  return est ? { cost: est.cost, source: "estimate" } : null;
+  return est ? { cost: est.cost, source: "estimate", note: est.note } : null;
 }
 
-/** Fills in an estimate for shipped orders that have no label cost at all (no ledger data needed). */
-export async function estimateMissingLabels(): Promise<number> {
-  const missing = await db.order.findMany({ where: { status: "SHIPPED", labelCost: null, digital: false } });
-  if (!missing.length) return 0;
-  const table = await labelCostByBox();
+/**
+ * Fills in an estimate for shipped orders with no label cost, and re-works
+ * every existing estimate against the latest known labels (local data only).
+ * Returns how many orders got a new or changed estimate.
+ */
+export async function refreshLabelEstimates(): Promise<number> {
+  const orders = await db.order.findMany({
+    where: { digital: false, OR: [{ labelCostSource: "estimate" }, { status: "SHIPPED", labelCost: null }] },
+    include: { parts: { include: { part: true } } },
+  });
+  if (!orders.length) return 0;
+  const past = await pastLabels();
   let n = 0;
-  for (const o of missing) {
-    const est = await estimateFor(o.id, table);
-    if (!est) continue;
-    const data = { labelCost: est.cost, labelCostSource: "estimate" };
+  for (const o of orders) {
+    const est = estimateLabel({ shippingPaid: o.shippingPaid, shipCountry: o.shipCountry, box: boxForOrder(o) }, past);
+    if (!est || (est.cost === o.labelCost && est.note === o.labelCostNote)) continue;
+    const data = { labelCost: est.cost, labelCostSource: "estimate", labelCostNote: est.note };
     await db.order.update({ where: { id: o.id }, data: { ...data, ...profit({ ...o, ...data }) } });
     n++;
   }
@@ -218,7 +291,7 @@ export async function markDigitalOrders(): Promise<number> {
   for (const o of orders) {
     if (!isDigitalOrder(parseLines(o.etsyLines), mappings, o.trackingNumber)) continue;
     const keepLabel = o.labelCostSource === "manual" || (o.labelCostSource == null && o.labelCost != null);
-    const label = keepLabel ? {} : { labelCost: 0, labelCostSource: "digital" };
+    const label = keepLabel ? {} : { labelCost: 0, labelCostSource: "digital", labelCostNote: null };
     const done = o.status === "SHIPPED" ? {} : { status: "SHIPPED", packed: true, shippedAt: o.orderedAt };
     const next = { ...o, ...label };
     await db.order.update({

@@ -132,6 +132,12 @@ export interface Order {
   labelCost?: number | null;
   /** "etsy" | "batch" | "estimate" | "manual" | "digital" | null (imported) */
   labelCostSource?: string | null;
+  /** How an estimate was worked out. */
+  labelCostNote?: string | null;
+  /** Destination country (ISO code); "" = unknown. */
+  shipCountry?: string | null;
+  /** Shipping the buyer paid on Etsy. */
+  shippingPaid?: number | null;
   productionCost?: number | null;
   laborMinutes?: number | null;
   netProfit?: number | null;
