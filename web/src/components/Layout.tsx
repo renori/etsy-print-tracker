@@ -17,7 +17,7 @@ function VersionTag() {
   if (!data) return null;
   const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
   return (
-    <div className="mt-6 border-t border-neutral-200 px-3 pt-3 text-xs text-neutral-500 dark:border-neutral-800">
+    <div className="mt-4 border-t border-neutral-200 px-2.5 pt-2.5 text-[11px] text-neutral-500 dark:border-neutral-800">
       <div>
         Version <span className="font-mono text-neutral-700 dark:text-neutral-300">{data.version}</span>
         {data.builtAt && <> · built {when(data.builtAt)}</>}
@@ -76,13 +76,57 @@ const TABS = ["/", "/queue", "/orders", "/stock"].map((to) => ALL.find((i) => i.
 
 const isActive = (to: string, path: string) => (to === "/" ? path === "/" : path === to || path.startsWith(to + "/"));
 
-function SideNav({ onNavigate }: { onNavigate?: () => void }) {
+const COLLAPSE_KEY = "nav.setupCollapsed";
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) !== "0"; // collapsed unless opened before
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * The menu: the desktop sidebar (compact) and the phone's "More" sheet (full
+ * size, easy to tap). On desktop, Setup folds away; it's always open while
+ * you're on one of its pages.
+ */
+function SideNav({ onNavigate, compact = false }: { onNavigate?: () => void; compact?: boolean }) {
+  const { pathname } = useLocation();
+  const [setupCollapsed, setSetupCollapsed] = useState(readCollapsed);
+  const toggleSetup = () => {
+    setSetupCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1");
+      } catch {
+        /* private mode: just don't remember */
+      }
+      return !c;
+    });
+  };
   return (
-    <nav aria-label="Main" className="space-y-5">
-      {GROUPS.map((g) => (
+    <nav aria-label="Main" className={compact ? "space-y-3" : "space-y-5"}>
+      {GROUPS.map((g) => {
+        const foldable = compact && g.title === "Setup";
+        const folded = foldable && setupCollapsed && !g.items.some((i) => isActive(i.to, pathname));
+        return (
         <div key={g.title}>
-          <div className="mb-1 px-3 text-xs font-semibold tracking-wide text-neutral-500 uppercase">{g.title}</div>
-          <div className="space-y-0.5">
+          {foldable ? (
+            <button
+              type="button"
+              onClick={toggleSetup}
+              aria-expanded={!folded}
+              className="mb-0.5 flex w-full items-center justify-between rounded-md px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            >
+              {g.title}
+              <Icon name="chevron" className={`h-3.5 w-3.5 transition-transform ${folded ? "" : "rotate-90"}`} />
+            </button>
+          ) : (
+            <div className={compact ? "mb-0.5 px-2.5 text-[11px] font-semibold tracking-wide text-neutral-500 uppercase" : "mb-1 px-3 text-xs font-semibold tracking-wide text-neutral-500 uppercase"}>
+              {g.title}
+            </div>
+          )}
+          {!folded && (
+          <div className={compact ? "space-y-px" : "space-y-0.5"}>
             {g.items.map((item) => (
               <NavLink
                 key={item.to}
@@ -90,20 +134,22 @@ function SideNav({ onNavigate }: { onNavigate?: () => void }) {
                 end={item.to === "/"}
                 onClick={onNavigate}
                 className={({ isActive: on }) =>
-                  `flex min-h-11 items-center gap-3 rounded-lg px-3 text-[15px] md:min-h-9 md:text-sm ${
+                  `flex items-center rounded-lg ${compact ? "min-h-8 gap-2.5 px-2.5 text-[13px]" : "min-h-11 gap-3 px-3 text-[15px]"} ${
                     on
                       ? "bg-indigo-600 font-medium text-white"
                       : "text-neutral-700 hover:bg-neutral-100 active:bg-neutral-200 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   }`
                 }
               >
-                <span className="flex w-5 justify-center">{item.icon && <Icon name={item.icon} className="h-[18px] w-[18px]" />}</span>
+                <span className="flex w-5 justify-center">{item.icon && <Icon name={item.icon} className={compact ? "h-4 w-4" : "h-[18px] w-[18px]"} />}</span>
                 {item.label}
               </NavLink>
             ))}
           </div>
+          )}
         </div>
-      ))}
+        );
+      })}
       <VersionTag />
     </nav>
   );
@@ -123,14 +169,14 @@ export function Layout() {
   return (
     <div className="min-h-dvh md:flex">
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 overflow-y-auto border-r border-neutral-200 bg-white px-3 py-5 md:block dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="mb-6 flex items-center gap-2.5 px-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
-            <Icon name="printer" className="h-[18px] w-[18px]" />
+      <aside className="sticky top-0 hidden h-dvh w-52 shrink-0 overflow-y-auto border-r border-neutral-200 bg-white px-2.5 py-4 md:block dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="mb-4 flex items-center gap-2 px-2.5">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white">
+            <Icon name="printer" className="h-4 w-4" />
           </span>
-          <span className="text-lg font-bold">Print Tracker</span>
+          <span className="font-bold">Print Tracker</span>
         </div>
-        <SideNav />
+        <SideNav compact />
       </aside>
 
       {/* Phone top bar */}
