@@ -158,3 +158,27 @@ export function Stepper({ value, onChange, min = 0, label }: { value: number; on
 /** File input whose "Choose file" part is a full-size button. */
 export const fileInputClass =
   "block w-full text-sm text-neutral-600 file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:text-sm file:font-semibold file:text-indigo-700 hover:file:bg-indigo-100 dark:text-neutral-400 dark:file:bg-indigo-950 dark:file:text-indigo-200";
+
+/**
+ * An order number that opens the order in Etsy's Shop Manager (new tab).
+ * Manual / replacement orders aren't on Etsy, so they stay plain text.
+ */
+export function EtsyOrderLink({ id, hash = true, className = "" }: { id: string; hash?: boolean; className?: string }) {
+  const text = `${hash ? "#" : ""}${id}`;
+  if (!/^\d+$/.test(id)) return <span className={className}>{text}</span>;
+  return (
+    <a
+      href={`https://www.etsy.com/your/orders/sold?order_id=${id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title="Open this order on Etsy"
+      className={`inline-flex min-h-6 items-center gap-0.5 text-indigo-700 underline decoration-indigo-300 underline-offset-2 hover:decoration-indigo-600 dark:text-indigo-400 dark:decoration-indigo-700 ${className}`}
+    >
+      {text}
+      <svg viewBox="0 0 16 16" aria-hidden="true" className="h-3 w-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6">
+        <path d="M6 3H3v10h10v-3M9 2h5v5M14 2 7 9" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </a>
+  );
+}

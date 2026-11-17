@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { boxesApi, ordersApi, usePackOrders, useShipOrders } from "../api/resources";
 import type { Box, Order, OrderStatus } from "../api/types";
 import { fmtDate } from "../lib/format";
-import { Button, Icon, PageHeader, inputClass } from "../components/ui";
+import { Button, EtsyOrderLink, Icon, PageHeader, inputClass } from "../components/ui";
 
 const STATUS_LABEL: Record<OrderStatus, string> = {
   NEEDS_PRINTING: "Needs printing",
@@ -282,7 +282,9 @@ function OrderCard({
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${PILL[order.status]}`}>{STATUS_LABEL[order.status]}</span>
             )}
           </div>
-          <div className="text-xs text-neutral-500">#{order.etsyOrderId}</div>
+          <div className="text-xs text-neutral-500">
+            <EtsyOrderLink id={order.etsyOrderId} />
+          </div>
           {handled ? (
             <div className="mt-1 text-sm">
               {order.itemsRaw.split("\n")[0]}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ordersApi, useEtsyStatus, useEtsySyncNow } from "../api/resources";
 import type { Order } from "../api/types";
 import { fmtDate, fmtMoney } from "../lib/format";
-import { Button, PageHeader } from "../components/ui";
+import { Button, EtsyOrderLink, PageHeader } from "../components/ui";
 
 const pct = (m: number | null | undefined) => (m != null ? `${Math.round(m * 100)}%` : "—");
 
@@ -158,7 +158,7 @@ export function CompletedOrders() {
                   <span className="font-semibold tabular-nums">{fmtMoney(o.netProfit)}</span>
                 </div>
                 <div className="text-xs text-neutral-500">
-                  #{o.etsyOrderId} · shipped {fmtDate(o.shippedAt)} · {pct(o.margin)} margin
+                  <EtsyOrderLink id={o.etsyOrderId} /> · shipped {fmtDate(o.shippedAt)} · {pct(o.margin)} margin
                 </div>
                 {o.labelCostSource === "estimate" && o.labelCostNote && (
                   <p className="mt-1 text-xs text-neutral-500 italic">≈ label: {o.labelCostNote}</p>
@@ -200,7 +200,9 @@ export function CompletedOrders() {
               <tbody>
                 {shipped.map((o) => (
                   <tr key={o.id} className="border-t border-neutral-100 dark:border-neutral-800">
-                    <td className="px-3 py-2">{o.etsyOrderId}</td>
+                    <td className="px-3 py-2">
+                      <EtsyOrderLink id={o.etsyOrderId} hash={false} />
+                    </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {o.buyerName}
                       <Dest order={o} />
