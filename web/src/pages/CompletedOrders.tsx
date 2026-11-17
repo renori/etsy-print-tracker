@@ -24,6 +24,7 @@ function LabelCost({ order }: { order: Order }) {
   };
 
   const est = order.labelCostSource === "estimate";
+  const digital = order.digital && order.labelCostSource === "digital";
   const batch = order.labelCostSource === "batch";
   if (!editing) {
     return (
@@ -33,6 +34,8 @@ function LabelCost({ order }: { order: Order }) {
         title={
           est
             ? "Estimated from past labels for this box size — tap to enter the real cost"
+            : digital
+              ? "Digital download — no shipping label"
             : batch
               ? "From a batch of labels bought together; the batch total is exact — tap to correct"
               : undefined
@@ -40,10 +43,12 @@ function LabelCost({ order }: { order: Order }) {
         className={`min-h-10 rounded-lg px-2 text-left tabular-nums md:min-h-8 ${
           missing ? "border border-dashed border-amber-400 text-amber-800 dark:text-amber-300" : "hover:bg-neutral-100 dark:hover:bg-neutral-800"
         }`}
-        aria-label={missing ? `Add label cost for ${order.buyerName}` : `Edit label cost for ${order.buyerName}${est ? " (estimated)" : ""}`}
+        aria-label={missing ? `Add label cost for ${order.buyerName}` : `Edit label cost for ${order.buyerName}${est ? " (estimated)" : digital ? " (digital, no label)" : ""}`}
       >
         {missing ? (
           "+ label"
+        ) : digital ? (
+          <span className="text-neutral-500">Digital</span>
         ) : est ? (
           <span className="text-neutral-500 italic">≈ {fmtMoney(order.labelCost)}</span>
         ) : (

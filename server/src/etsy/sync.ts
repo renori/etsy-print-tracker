@@ -1,8 +1,8 @@
 import cron from "node-cron";
 import { db } from "../lib/db.js";
 import { etsyGet, isEtsyConnected } from "./client.js";
-import { loadMappings, relinkOpenOrders, resolveLines, type OrderLine } from "../lib/orderLines.js";
-import { applyFinancials, estimateMissingLabels, refsFromStoredLines, type SaleRefs } from "../lib/financials.js";
+import { loadMappings, parseLines, relinkOpenOrders, resolveLines, type OrderLine } from "../lib/orderLines.js";
+import { applyFinancials, estimateMissingLabels, markDigitalOrders, refsFromStoredLines, type SaleRefs } from "../lib/financials.js";
 import { rebuildQueue } from "../scheduler/queue.js";
 import { ORDER_STATUS } from "../lib/constants.js";
 import { moveStock } from "../lib/stock.js";
@@ -24,6 +24,7 @@ interface EtsyTransaction {
   listing_id: number;
   title: string;
   quantity: number;
+  is_digital?: boolean;
   variations?: { formatted_name: string; formatted_value: string }[];
 }
 
@@ -97,7 +98,13 @@ function linesOf(r: EtsyReceipt): OrderLine[] {
     title: t.title,
     quantity: t.quantity,
     variations: (t.variations ?? []).map((v) => ({ name: v.formatted_name, value: v.formatted_value })),
+    ...(typeof t.is_digital === "boolean" ? { digital: t.is_digital } : {}),
   }));
+}
+
+/** Stored lines from before Etsy's digital flag was kept. */
+function linesNeedRefresh(json: string | null) {
+  return !json || parseLines(json).some((l) => l.digital === undefined);
 }
 
 export async function syncReceipts() {
@@ -229,7 +236,8 @@ export async function syncOpenOrders() {
         Object.assign(data, info);
         result.labelsFound++;
       }
-      if (!o.etsyLines && receipt.transactions?.length) {
+      const hasDigitalFlag = receipt.transactions?.some((t) => typeof t.is_digital === "boolean");
+      if ((!o.etsyLines && receipt.transactions?.length) || (linesNeedRefresh(o.etsyLines) && hasDigitalFlag)) {
         data.etsyLines = JSON.stringify(linesOf(receipt));
         result.linesBackfilled++;
       }
@@ -334,6 +342,9 @@ export async function syncFinancials() {
     let refs: SaleRefs = refsFromStoredLines(o);
     try {
       const r = await etsyGet<EtsyReceipt & { shipments?: (EtsyShipment & { receipt_shipping_id?: number })[] }>(`/shops/${shopId}/receipts/${o.etsyOrderId}`);
+      if (linesNeedRefresh(o.etsyLines) && r.transactions?.some((t) => typeof t.is_digital === "boolean")) {
+        await db.order.update({ where: { id: o.id }, data: { etsyLines: JSON.stringify(linesOf(r)) } });
+      }
       refs = {
         receiptId: o.etsyOrderId,
         transactionIds: (r.transactions ?? []).map((t) => String(t.transaction_id)),
@@ -360,10 +371,13 @@ export async function syncNow() {
   const receipts = await syncReceipts();
   const openOrders = await syncOpenOrders();
   const shippedOnEtsy = await syncShippedReceipts();
+  const digital = await markDigitalOrders();
   const ledger = await syncLedger();
   const financials = await syncFinancials();
+  const digitalAfter = await markDigitalOrders(); // older orders whose lines the financials pass just refreshed
+  if (digital + digitalAfter) await rebuildQueue();
   const labelsEstimated = await estimateMissingLabels();
-  return { receipts, openOrders, shippedOnEtsy, ledger, financials: { ...financials, labelsEstimated } };
+  return { receipts, openOrders, shippedOnEtsy, digital: digital + digitalAfter, ledger, financials: { ...financials, labelsEstimated } };
 }
 
 export function startEtsySyncJob() {

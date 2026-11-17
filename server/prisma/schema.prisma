@@ -172,6 +172,8 @@ model Order {
   labelBought     Boolean     @default(false)
   labelBoughtAt   DateTime?
   packageType     String?
+  /// Every item is a digital download: nothing to print, pack or ship, so no label cost.
+  digital         Boolean     @default(false)
 
   shippedAt       DateTime?
   carrier         String?
@@ -183,7 +185,7 @@ model Order {
   etsyEarnings    Float?
   labelCost       Float?
   /// Where labelCost came from: "etsy" (ledger match), "batch" (paired within a batch of labels
-  /// bought together), "estimate" (typical cost for the box size), "manual" (typed in), null (imported).
+  /// bought together), "estimate" (typical cost for the box size), "manual" (typed in), "digital" (download, $0), null (imported).
   labelCostSource String?
   productionCost  Float?
   laborMinutes    Float?

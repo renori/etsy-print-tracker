@@ -6,6 +6,8 @@ export interface OrderLine {
   title: string;
   quantity: number;
   variations: { name: string; value: string }[];
+  /** Etsy's is_digital for the line (absent on lines stored before this was kept). */
+  digital?: boolean;
 }
 
 export function parseLines(json: string | null | undefined): OrderLine[] {
@@ -37,6 +39,16 @@ export function matchMapping(line: OrderLine, mappings: Mapping[]): Mapping | nu
 
 export async function loadMappings(): Promise<Mapping[]> {
   return db.listingMapping.findMany({ include: { parts: true } });
+}
+
+/**
+ * True when every line is a digital download. Etsy's own flag wins; for lines
+ * stored without it, a line counts as digital when its Listing Map row has no
+ * parts ("digital / nothing to print"). An order with tracking never is.
+ */
+export function isDigitalOrder(lines: OrderLine[], mappings: Mapping[], trackingNumber?: string | null): boolean {
+  if (!lines.length || trackingNumber) return false;
+  return lines.every((l) => l.digital ?? matchMapping(l, mappings)?.parts.length === 0);
 }
 
 /** Parts an order needs, plus the lines that matched nothing in the Listing Map. */

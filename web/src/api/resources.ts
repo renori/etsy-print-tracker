@@ -126,6 +126,7 @@ export interface SyncResult {
   receipts: { fetched: number };
   openOrders: { checked: number; labelsFound: number; autoCompleted: number; canceled: number; relinked: number };
   shippedOnEtsy: { added: number };
+  digital?: number;
   ledger: { fetched: number };
   financials: { filled: number; labelsEstimated: number };
 }
@@ -138,6 +139,7 @@ export function describeSync(r: SyncResult, newOrders: number): string {
     r.openOrders.autoCompleted + r.shippedOnEtsy.added &&
       `${r.openOrders.autoCompleted + r.shippedOnEtsy.added} completed on Etsy`,
     r.openOrders.canceled && `${r.openOrders.canceled} canceled`,
+    r.digital && `${r.digital} digital download${r.digital === 1 ? "" : "s"} (no label)`,
     r.financials.filled && `profit filled for ${r.financials.filled}`,
     r.financials.labelsEstimated && `${r.financials.labelsEstimated} label cost${r.financials.labelsEstimated === 1 ? "" : "s"} estimated`,
   ].filter(Boolean);

@@ -1,0 +1,1 @@
+ALTER TABLE "Order" ADD COLUMN "digital" BOOLEAN NOT NULL DEFAULT false;

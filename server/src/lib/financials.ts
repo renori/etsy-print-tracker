@@ -1,5 +1,5 @@
 import { db } from "./db.js";
-import { parseLines } from "./orderLines.js";
+import { isDigitalOrder, loadMappings, parseLines } from "./orderLines.js";
 import { boxForOrder, normBoxName } from "./boxes.js";
 
 /**
@@ -127,7 +127,7 @@ const median = (xs: number[]) => {
  */
 export async function labelCostByBox(): Promise<Map<string, { cost: number; n: number }>> {
   const known = await db.order.findMany({
-    where: { labelCost: { not: null, gt: 0 }, OR: [{ labelCostSource: null }, { labelCostSource: { in: ["etsy", "manual", "batch"] } }] },
+    where: { digital: false, labelCost: { not: null, gt: 0 }, OR: [{ labelCostSource: null }, { labelCostSource: { in: ["etsy", "manual", "batch"] } }] },
     include: { parts: { include: { part: true } } },
     orderBy: { orderedAt: "desc" },
     take: 500,
@@ -162,6 +162,7 @@ async function estimateFor(orderId: string, byBox?: Map<string, { cost: number; 
 async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number; source: string } | null> {
   if (order.labelCostSource === "manual") return null;
   if (order.labelCostSource == null && order.labelCost != null) return null; // imported from the sheet
+  if (order.digital) return { cost: 0, source: "digital" }; // downloads have no label
 
   if (refs.shipmentIds.length) {
     const direct = await db.etsyLedgerEntry.findMany({ where: { ledgerType: "shipping_labels", referenceId: { in: refs.shipmentIds } } });
@@ -172,7 +173,7 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
     const t = order.labelBoughtAt.getTime();
     const window = { gte: new Date(t - WINDOW), lte: new Date(t + WINDOW) };
     const labels = await db.etsyLedgerEntry.findMany({ where: { ledgerType: "shipping_labels", createdAt: window }, orderBy: [{ amount: "desc" }, { etsyEntryId: "asc" }] });
-    const batch = await db.order.findMany({ where: { labelBoughtAt: window }, orderBy: { id: "asc" } });
+    const batch = await db.order.findMany({ where: { labelBoughtAt: window, digital: false }, orderBy: { id: "asc" } });
     if (labels.length && labels.length === batch.length) {
       const table = await labelCostByBox();
       const expected = await Promise.all(batch.map(async (o) => ({ id: o.id, est: (await estimateFor(o.id, table))?.cost ?? 0 })));
@@ -192,7 +193,7 @@ async function labelFor(order: OrderRow, refs: SaleRefs): Promise<{ cost: number
 
 /** Fills in an estimate for shipped orders that have no label cost at all (no ledger data needed). */
 export async function estimateMissingLabels(): Promise<number> {
-  const missing = await db.order.findMany({ where: { status: "SHIPPED", labelCost: null } });
+  const missing = await db.order.findMany({ where: { status: "SHIPPED", labelCost: null, digital: false } });
   if (!missing.length) return 0;
   const table = await labelCostByBox();
   let n = 0;
@@ -201,6 +202,29 @@ export async function estimateMissingLabels(): Promise<number> {
     if (!est) continue;
     const data = { labelCost: est.cost, labelCostSource: "estimate" };
     await db.order.update({ where: { id: o.id }, data: { ...data, ...profit({ ...o, ...data }) } });
+    n++;
+  }
+  return n;
+}
+
+/**
+ * Flags orders whose items are all digital downloads: label cost $0 (unless
+ * typed in or imported), and an open one is completed, since Etsy delivers it.
+ */
+export async function markDigitalOrders(): Promise<number> {
+  const mappings = await loadMappings();
+  const orders = await db.order.findMany({ where: { digital: false, etsyLines: { not: null } } });
+  let n = 0;
+  for (const o of orders) {
+    if (!isDigitalOrder(parseLines(o.etsyLines), mappings, o.trackingNumber)) continue;
+    const keepLabel = o.labelCostSource === "manual" || (o.labelCostSource == null && o.labelCost != null);
+    const label = keepLabel ? {} : { labelCost: 0, labelCostSource: "digital" };
+    const done = o.status === "SHIPPED" ? {} : { status: "SHIPPED", packed: true, shippedAt: o.orderedAt };
+    const next = { ...o, ...label };
+    await db.order.update({
+      where: { id: o.id },
+      data: { digital: true, labelBought: false, labelBoughtAt: null, ...label, ...done, ...profit(next) },
+    });
     n++;
   }
   return n;

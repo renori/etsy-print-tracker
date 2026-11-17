@@ -119,6 +119,8 @@ export interface Order {
   labelBought: boolean;
   labelBoughtAt?: string | null;
   packageType?: string | null;
+  /** All items are digital downloads: no label, nothing to pack. */
+  digital?: boolean;
   shippedAt?: string | null;
   carrier?: string | null;
   trackingNumber?: string | null;
@@ -128,7 +130,7 @@ export interface Order {
   etsyFees?: number | null;
   etsyEarnings?: number | null;
   labelCost?: number | null;
-  /** "etsy" | "batch" | "estimate" | "manual" | null (imported) */
+  /** "etsy" | "batch" | "estimate" | "manual" | "digital" | null (imported) */
   labelCostSource?: string | null;
   productionCost?: number | null;
   laborMinutes?: number | null;
