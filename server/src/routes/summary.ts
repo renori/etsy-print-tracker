@@ -25,14 +25,16 @@ export default async function summaryRoutes(app: FastifyInstance) {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const yearStart = new Date(now.getFullYear(), 0, 1);
+    // Upper bound for "this month" / "so far": anything dated after this month isn't spent yet (or has a typo'd date).
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
     const [queue, orders, boxes, stock, expenses, trips, replacements, etsyConnected, lastLedger, unmapped] = await Promise.all([
       db.plateQueueEntry.findMany({ where: { done: false }, include: { printer: true }, orderBy: { plannedStart: "asc" } }),
       db.order.findMany({ include: { parts: { include: { part: true } } } }),
       db.box.findMany(),
       printedStockReport(),
-      db.expense.findMany({ where: { date: { gte: lastMonthStart < yearStart ? lastMonthStart : yearStart } } }),
-      db.mileageEntry.findMany({ where: { date: { gte: yearStart } } }),
+      db.expense.findMany({ where: { date: { gte: lastMonthStart < yearStart ? lastMonthStart : yearStart, lt: nextMonthStart } } }),
+      db.mileageEntry.findMany({ where: { date: { gte: yearStart, lt: nextMonthStart } } }),
       db.replacement.count({ where: { shipped: false } }),
       isEtsyConnected(),
       db.etsyLedgerEntry.findFirst({ orderBy: { createdAt: "desc" } }),

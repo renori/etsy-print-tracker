@@ -35,6 +35,9 @@ export function ExpenseMonth({ rows }: { rows: Expense[] }) {
     .sort((a, b) => b.sum - a.sum);
 
   const label = month.toLocaleString(undefined, { month: "long", year: "numeric" });
+  // Dated after the current month (scheduled amortization, or a mistyped year): not counted until then.
+  const now = new Date();
+  const future = rows.filter((e) => new Date(e.date) >= new Date(now.getFullYear(), now.getMonth() + 1, 1)).sort((a, b) => +new Date(a.date) - +new Date(b.date));
 
   return (
     <section className="mb-5 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -87,6 +90,24 @@ export function ExpenseMonth({ rows }: { rows: Expense[] }) {
             </li>
           ))}
         </ul>
+      )}
+      {future.length > 0 && (
+        <div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="font-medium">
+            {future.length} expense{future.length === 1 ? " is" : "s are"} dated after this month ({fmtMoney(future.reduce((s, e) => s + e.cost, 0))}). They'll
+            count in their own month, e.g. amortization booked for later years. If one shouldn't be in the future, fix its date below.
+          </div>
+          <ul className="mt-1.5 space-y-0.5">
+            {future.slice(0, 8).map((e) => (
+              <li key={e.id} className="flex gap-3">
+                <span className="w-24 shrink-0">{fmtDate(e.date)}</span>
+                <span className="min-w-0 flex-1 truncate">{e.item}</span>
+                <span className="tabular-nums">{fmtMoney(e.cost)}</span>
+              </li>
+            ))}
+            {future.length > 8 && <li>…and {future.length - 8} more</li>}
+          </ul>
+        </div>
       )}
       <p className="mt-3 text-xs text-neutral-500">
         Same total as Home: every expense dated in the month, deductible or not. Not included: mileage (tracked separately as a deduction) and each
