@@ -38,4 +38,11 @@ ENV PORT=9999
 EXPOSE 9999
 VOLUME ["/app/data"]
 
+# Which build this is (set by the GitHub workflow; shown in the app's menu).
+# Last so a new commit doesn't invalidate the cached layers above.
+ARG GIT_SHA=dev
+ARG BUILD_TIME=
+ARG BUILD_SUBJECT=
+ENV APP_VERSION=$GIT_SHA APP_BUILT_AT=$BUILD_TIME APP_CHANGE=$BUILD_SUBJECT
+
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]

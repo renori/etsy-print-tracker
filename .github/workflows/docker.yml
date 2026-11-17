@@ -28,6 +28,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Stamped into the image so the app can show which version is running.
+      - id: ver
+        run: |
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "subject=$(git log -1 --format=%s | tr -d '\r' | cut -c1-120)" >> "$GITHUB_OUTPUT"
+
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -43,5 +49,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.ver.outputs.time }}
+            BUILD_SUBJECT=${{ steps.ver.outputs.subject }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

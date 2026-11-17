@@ -1,6 +1,32 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Icon, IconButton, type IconName } from "./ui";
+import { api } from "../api/client";
+
+interface Health {
+  version: string;
+  builtAt: string | null;
+  change: string | null;
+  startedAt: string;
+}
+
+/** Which build is running, so an update from GitHub is easy to confirm. */
+function VersionTag() {
+  const { data } = useQuery({ queryKey: ["health"], queryFn: () => api.get<Health>("/health"), staleTime: 60_000 });
+  if (!data) return null;
+  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return (
+    <div className="mt-6 border-t border-neutral-200 px-3 pt-3 text-xs text-neutral-500 dark:border-neutral-800">
+      <div>
+        Version <span className="font-mono text-neutral-700 dark:text-neutral-300">{data.version}</span>
+        {data.builtAt && <> · built {when(data.builtAt)}</>}
+      </div>
+      {data.change && <div className="mt-0.5 line-clamp-2" title={data.change}>{data.change}</div>}
+      <div className="mt-0.5">Running since {when(data.startedAt)}</div>
+    </div>
+  );
+}
 
 interface NavItem {
   to: string;
@@ -76,6 +102,7 @@ function SideNav({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         </div>
       ))}
+      <VersionTag />
     </nav>
   );
 }

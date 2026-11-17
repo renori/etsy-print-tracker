@@ -25,6 +25,14 @@ import { startEtsySyncJob } from "./etsy/sync.js";
 import { repairUtcMidnightDates } from "./lib/dates.js";
 import { markDigitalOrders, refreshLabelEstimates } from "./lib/financials.js";
 
+/** Which build is running: stamped into the image by the GitHub workflow. */
+const VERSION = {
+  version: (process.env.APP_VERSION || "dev").slice(0, 7),
+  builtAt: process.env.APP_BUILT_AT || null,
+  change: process.env.APP_CHANGE || null,
+  startedAt: new Date().toISOString(),
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({ logger: true });
@@ -36,7 +44,7 @@ await app.register(cors, { origin: true });
 // server also serves the built frontend, so no path games are needed there.
 await app.register(
   async (api) => {
-    api.get("/health", async () => ({ ok: true }));
+    api.get("/health", async () => ({ ok: true, ...VERSION }));
     await api.register(printerRoutes);
     await api.register(partRoutes);
     await api.register(plateRecipeRoutes);
