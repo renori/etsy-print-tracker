@@ -85,6 +85,7 @@ const PATHS = {
   refresh: "M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4",
   upload: "M12 16V4M7 9l5-5 5 5M4 20h16",
   download: "M12 4v12M7 11l5 5 5-5M4 20h16",
+  bolt: "M13 2 4 14h7l-1 8 9-12h-7z",
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -22,6 +22,8 @@ import importRoutes from "./routes/importSheet.js";
 import boxRoutes from "./routes/boxes.js";
 import exportRateRoutes from "./routes/exportRates.js";
 import taxExportRoutes from "./routes/taxExport.js";
+import electricityRoutes from "./routes/electricity.js";
+import { refreshElectricitySoon } from "./lib/electricity.js";
 import summaryRoutes from "./routes/summary.js";
 import { startEtsySyncJob } from "./etsy/sync.js";
 import { repairUtcMidnightDates } from "./lib/dates.js";
@@ -40,6 +42,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: true });
 
 await app.register(cors, { origin: true });
+
+// Any change made in the app (an order completed, a part's cost edited, a
+// listing mapped, an import...) can move a month's electricity COGS, so the
+// monthly electricity expenses are refreshed after every successful change.
+app.addHook("onResponse", async (req, reply) => {
+  if (req.method !== "GET" && req.url.startsWith("/api/") && !req.url.startsWith("/api/electricity") && reply.statusCode < 400) void refreshElectricitySoon();
+});
 
 // Everything the frontend calls lives under /api — in dev the Vite proxy
 // forwards /api/* here untouched; in the packaged Docker image this same
@@ -63,6 +72,7 @@ await app.register(
     await api.register(boxRoutes);
     await api.register(exportRateRoutes);
     await api.register(taxExportRoutes);
+    await api.register(electricityRoutes);
     await api.register(summaryRoutes);
   },
   { prefix: "/api" }
@@ -86,6 +96,7 @@ const repaired = await repairUtcMidnightDates();
 if (repaired) app.log.info(`Moved ${repaired} date(s) saved as UTC midnight to the correct day`);
 const digital = await markDigitalOrders();
 if (digital) app.log.info(`Marked ${digital} digital-download order(s): no shipping label`);
+await refreshElectricitySoon();
 const reestimated = await refreshLabelEstimates();
 if (reestimated) app.log.info(`Updated ${reestimated} label cost estimate(s)`);
 

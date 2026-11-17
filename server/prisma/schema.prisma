@@ -315,3 +315,25 @@ model EtsyCredentials {
   refreshToken  String?
   tokenExpiresAt DateTime?
 }
+
+/// Settings for back-calculating printer electricity as COGS (singleton).
+model ElectricitySettings {
+  id                  Int     @id @default(1)
+  /// Your electric rate, $ per kWh. Needed for the always-on overhead.
+  kwhRate             Float?
+  /// Power each printer draws while idle but switched on (watts).
+  idleWattsPerPrinter Float   @default(10)
+  /// Printers left on 24/7. Blank = the number of active printers.
+  printersOn          Int?
+  /// Extra % on top of per-item print electricity (failed prints, preheating, purges).
+  bufferPct           Float   @default(10)
+}
+
+/// A sold-item description matched by hand to a part, for orders with no parts linked.
+model ElectricityMatch {
+  id      String  @id @default(cuid())
+  /// Normalised item text, e.g. "full grip case style full back".
+  text    String  @unique
+  /// Part to use; null = not a printed item (no electricity).
+  partId  String?
+}
