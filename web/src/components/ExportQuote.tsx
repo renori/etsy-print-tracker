@@ -73,6 +73,7 @@ export function ExportQuote({ order, onUpdate }: { order: Order; onUpdate: (data
                 {w ? `${w.oz} oz` : "Set weight"}
                 {w?.basis === "estimated" && " (estimated)"}
                 {w?.basis === "typed" && " (typed)"}
+                {w?.basis === "box" && ` (${w.box} box)`}
               </button>
             )}
             {q && !editing && <span>· ≤{q.tierOz} oz tier · {q.zone === "canada" ? "Canada" : "rest of world"}</span>}

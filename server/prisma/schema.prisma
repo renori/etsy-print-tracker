@@ -255,6 +255,8 @@ model Box {
   costEach  Float?
   /// Empty box/mailer weight in ounces, added to an order's shipping weight.
   weightOz  Float?
+  /// Weight every order in this box is quoted at (oz), e.g. 16 for a 13x10x3. Blank = weigh by parts.
+  quoteWeightOz Float?
   notes     String?
 }
 

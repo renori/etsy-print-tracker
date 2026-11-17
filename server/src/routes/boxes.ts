@@ -9,6 +9,7 @@ const create = z.object({
   reorderAt: z.number().int().nullable().optional(),
   costEach: z.number().nullable().optional(),
   weightOz: z.number().nonnegative().nullable().optional(),
+  quoteWeightOz: z.number().positive().nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 const update = create.partial();

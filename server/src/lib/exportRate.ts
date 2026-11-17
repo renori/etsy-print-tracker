@@ -26,15 +26,17 @@ type WeighableOrder = {
 
 export interface OrderWeight {
   oz: number;
-  /** "typed" = entered on the order; "parts" = every part (and the box) has a ship weight; "estimated" = some fell back to filament weight. */
-  basis: "typed" | "parts" | "estimated";
+  /** "typed" = entered on the order; "box" = the box's quote weight; "parts" = every part (and the box) has a ship weight; "estimated" = some fell back to filament weight. */
+  basis: "typed" | "box" | "parts" | "estimated";
   box: string | null;
 }
 
-/** Packed weight: typed in on the order, else parts' ship weights (or filament weight) + the empty box. */
-export function orderWeight(o: WeighableOrder, boxes: { name: string; weightOz: number | null }[]): OrderWeight | null {
+/** Packed weight: typed in on the order, else the box's quote weight, else parts' ship weights (or filament weight) + the empty box. */
+export function orderWeight(o: WeighableOrder, boxes: { name: string; weightOz: number | null; quoteWeightOz: number | null }[]): OrderWeight | null {
   const box = boxForOrder(o);
   if (o.shipWeightOz != null && o.shipWeightOz > 0) return { oz: o.shipWeightOz, basis: "typed", box };
+  const boxRow = box ? boxes.find((b) => normBoxName(b.name) === normBoxName(box)) : null;
+  if (boxRow?.quoteWeightOz != null && boxRow.quoteWeightOz > 0) return { oz: boxRow.quoteWeightOz, basis: "box", box };
   if (!o.parts.length) return null;
   let oz = 0;
   let exact = true;
@@ -46,7 +48,6 @@ export function orderWeight(o: WeighableOrder, boxes: { name: string; weightOz: 
       exact = false;
     }
   }
-  const boxRow = box ? boxes.find((b) => normBoxName(b.name) === normBoxName(box)) : null;
   if (boxRow?.weightOz != null) oz += boxRow.weightOz;
   else exact = false;
   return { oz: Math.round(oz * 10) / 10, basis: exact ? "parts" : "estimated", box };
@@ -70,7 +71,7 @@ export function quoteExport(weight: OrderWeight | null, country: string | null |
 
 /** Everything a quote needs, loaded once for a batch of orders. */
 export async function quoteContext() {
-  const [boxes, rates] = await Promise.all([db.box.findMany({ select: { name: true, weightOz: true } }), db.exportRate.findMany()]);
+  const [boxes, rates] = await Promise.all([db.box.findMany({ select: { name: true, weightOz: true, quoteWeightOz: true } }), db.exportRate.findMany()]);
   return {
     boxes,
     rates,

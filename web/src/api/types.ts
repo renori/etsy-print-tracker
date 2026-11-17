@@ -143,7 +143,7 @@ export interface Order {
   /** Packed weight typed in on the order (oz). */
   shipWeightOz?: number | null;
   /** Packed weight the server worked out (or the typed one). */
-  weight?: { oz: number; basis: "typed" | "parts" | "estimated"; box: string | null } | null;
+  weight?: { oz: number; basis: "typed" | "box" | "parts" | "estimated"; box: string | null } | null;
   /** Pirate Ship Simple Export Rate for orders going abroad. */
   exportQuote?: { price: number; zone: "canada" | "world"; tierOz: number } | null;
   productionCost?: number | null;
@@ -163,6 +163,8 @@ export interface Box {
   costEach?: number | null;
   /** Empty box weight (oz). */
   weightOz?: number | null;
+  /** Every order in this box is quoted at this weight (oz). */
+  quoteWeightOz?: number | null;
   notes?: string | null;
 }
 

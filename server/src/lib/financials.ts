@@ -223,7 +223,7 @@ type OrderWithParts = Parameters<QuoteCtx["quote"]>[0] & { shippingPaid: number 
 function guessLabel(o: OrderWithParts, past: PastLabel[], ctx: QuoteCtx): { cost: number; source: string; note: string } | null {
   const { exportQuote: q } = ctx.quote(o);
   if (q) {
-    const how = q.weight.basis === "typed" ? "typed weight" : q.weight.basis === "parts" ? "parts + box weight" : "estimated weight";
+    const how = q.weight.basis === "typed" ? "typed weight" : q.weight.basis === "box" ? `${q.weight.box} box weight` : q.weight.basis === "parts" ? "parts + box weight" : "estimated weight";
     return { cost: q.price, source: "quote", note: `Simple Export Rate to ${o.shipCountry}: ${q.weight.oz} oz (${how}), ≤${q.tierOz} oz tier` };
   }
   const est = estimateLabel({ shippingPaid: o.shippingPaid, shipCountry: o.shipCountry, box: boxForOrder(o) }, past);

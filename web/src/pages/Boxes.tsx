@@ -18,7 +18,7 @@ const columns: Column<Box>[] = [
   { key: "reorderAt", label: "Reorder at", render: (b) => (b.reorderAt ?? "—") as React.ReactNode },
   { key: "status", label: "", render: (b) => (isLow(b) ? <span className="rounded bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Reorder</span> : null) },
   { key: "costEach", label: "Cost each", render: (b) => fmtMoney(b.costEach) },
-  { key: "weightOz", label: "Weight", render: (b) => (b.weightOz != null ? `${b.weightOz} oz` : "—") },
+  { key: "quoteWeightOz", label: "Quote as", render: (b) => (b.quoteWeightOz != null ? (b.quoteWeightOz % 16 === 0 ? `${b.quoteWeightOz / 16} lb` : `${b.quoteWeightOz} oz`) : "—") },
   { key: "notes", label: "Notes" },
 ];
 
@@ -27,7 +27,8 @@ const fields: FieldConfig[] = [
   { key: "onHand", label: "On hand", type: "number", defaultValue: 0 },
   { key: "reorderAt", label: "Reorder when at or below", type: "number" },
   { key: "costEach", label: "Cost each", type: "number" },
-  { key: "weightOz", label: "Empty weight (oz), added to shipping weight", type: "number" },
+  { key: "quoteWeightOz", label: "Quote as (oz): every order in this box is quoted at this weight (16 = 1 lb)", type: "number" },
+  { key: "weightOz", label: "Empty weight (oz), only used when Quote as is blank", type: "number" },
   { key: "notes", label: "Notes (supplier, link…)", type: "text" },
 ];
 
