@@ -18,6 +18,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - tracker-data:/app/data
+      # Nightly backups land here. Point it at a NAS shared folder (e.g.
+      # /Volume1/Backups/print-tracker) and sync that folder to Google Drive
+      # with TOS's CloudSync app.
+      - ${BACKUP_PATH:-./backups}:/app/backups
     labels:
       - com.centurylinklabs.watchtower.enable=true
     healthcheck:

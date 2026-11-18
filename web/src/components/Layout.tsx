@@ -66,6 +66,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
       { to: "/printers", label: "Printers" },
       { to: "/blackout", label: "Schedule & Blackouts" },
       { to: "/etsy", label: "Etsy Connection" },
+      { to: "/backups", label: "Backups" },
       { to: "/import", label: "Import from Sheet", icon: "upload" },
     ],
   },

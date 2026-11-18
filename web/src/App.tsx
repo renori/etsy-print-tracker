@@ -15,6 +15,7 @@ import { Expenses } from "./pages/Expenses";
 import { Mileage } from "./pages/Mileage";
 import { TaxExport } from "./pages/TaxExport";
 import { Electricity } from "./pages/Electricity";
+import { Backups } from "./pages/Backups";
 import { Ledger } from "./pages/Ledger";
 import { EtsyConnection } from "./pages/EtsyConnection";
 import { ImportSheet } from "./pages/ImportSheet";
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="mileage" element={<Mileage />} />
         <Route path="taxes" element={<TaxExport />} />
         <Route path="electricity" element={<Electricity />} />
+        <Route path="backups" element={<Backups />} />
         <Route path="ledger" element={<Ledger />} />
         <Route path="etsy" element={<EtsyConnection />} />
         <Route path="import" element={<ImportSheet />} />

@@ -23,6 +23,8 @@ import boxRoutes from "./routes/boxes.js";
 import exportRateRoutes from "./routes/exportRates.js";
 import taxExportRoutes from "./routes/taxExport.js";
 import electricityRoutes from "./routes/electricity.js";
+import backupRoutes from "./routes/backups.js";
+import { startBackupJob } from "./lib/backup.js";
 import { refreshElectricitySoon } from "./lib/electricity.js";
 import { shipLinkedReplacementsSoon } from "./lib/replacements.js";
 import summaryRoutes from "./routes/summary.js";
@@ -77,6 +79,7 @@ await app.register(
     await api.register(exportRateRoutes);
     await api.register(taxExportRoutes);
     await api.register(electricityRoutes);
+    await api.register(backupRoutes);
     await api.register(summaryRoutes);
   },
   { prefix: "/api" }
@@ -109,3 +112,4 @@ const port = Number(process.env.PORT ?? 9999);
 await app.listen({ port, host: "0.0.0.0" });
 
 startEtsySyncJob();
+await startBackupJob();
