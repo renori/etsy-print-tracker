@@ -89,6 +89,11 @@ export function Orders() {
             <Button icon="check" onClick={() => setSelected(new Set(unpacked.map((o) => o.id)))} disabled={unpacked.length === 0}>
               Select all unpacked
             </Button>
+            {open.some((o) => o.packed) && (
+              <Button icon="box" onClick={() => setSelected(new Set(open.filter((o) => o.packed).map((o) => o.id)))}>
+                Select all packed
+              </Button>
+            )}
           </>
         }
       />
@@ -100,7 +105,16 @@ export function Orders() {
           noBox={summary.noBox}
           toPack={selectedOrders.filter((o) => !o.packed).length}
           toUnpack={selectedOrders.filter((o) => o.packed).length}
-          busy={packing}
+          toShip={selectedOrders.filter((o) => o.packed).length}
+          busy={packing || shipping}
+          onShip={() => {
+            const ids = selectedOrders.filter((o) => o.packed).map((o) => o.id);
+            const notPacked = selectedOrders.length - ids.length;
+            const msg = `Mark ${ids.length} packed order${ids.length === 1 ? "" : "s"} as shipped? They'll move to Completed Orders.${
+              notPacked ? `\n\n${notPacked} selected order${notPacked === 1 ? " isn't" : "s aren't"} packed yet and will stay here.` : ""
+            }`;
+            if (confirm(msg)) ship(ids, { onSuccess: () => setSelected((prev) => new Set([...prev].filter((id) => !ids.includes(id)))) });
+          }}
           onPack={(packed) =>
             pack(
               { ids: selectedOrders.filter((o) => o.packed !== packed).map((o) => o.id), packed },
@@ -173,16 +187,20 @@ function BoxSummary({
   noBox,
   toPack,
   toUnpack,
+  toShip,
   busy,
   onPack,
+  onShip,
 }: {
   count: number;
   lines: BoxLine[];
   noBox: number;
   toPack: number;
   toUnpack: number;
+  toShip: number;
   busy: boolean;
   onPack: (packed: boolean) => void;
+  onShip: () => void;
 }) {
   return (
     <section
@@ -224,6 +242,11 @@ function BoxSummary({
         {toPack > 0 && (
           <Button variant="primary" icon="check" disabled={busy} onClick={() => onPack(true)} className="flex-1 sm:flex-none">
             {busy ? "Packing…" : `Mark ${toPack} packed`}
+          </Button>
+        )}
+        {toShip > 0 && (
+          <Button variant="success" icon="check" disabled={busy} onClick={onShip} className="flex-1 sm:flex-none">
+            Mark {toShip} shipped
           </Button>
         )}
         {toUnpack > 0 && (

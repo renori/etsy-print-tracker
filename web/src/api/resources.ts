@@ -212,6 +212,7 @@ export function useShipOrders() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["queue"] });
+      qc.invalidateQueries({ queryKey: ["replacements"] }); // a linked replacement ships with its order
     },
   });
 }
